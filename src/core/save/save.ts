@@ -2,7 +2,16 @@
 // 版本不符時先跑 migrations 補到 SAVE_SCHEMA_VERSION 再驗證欄位內容。
 
 import { validateCommand, type Command } from '../sim/commands';
-import { SAVE_SCHEMA_VERSION, type Building, type GameState } from '../world/state';
+import { SAVE_SCHEMA_VERSION, type Building, type Citizen, type GameState } from '../world/state';
+
+/** citizens 的 id/home/job 字串長度上限：擋存檔異常巨大字串撐爆記憶體/顯示 */
+const MAX_CITIZEN_ID_LENGTH = 128;
+
+/** citizens 座標絕對值上限：世界座標不應離譜到這個量級，擋資料損壞的離譜座標 */
+const MAX_CITIZEN_COORD_ABS = 1e6;
+
+/** citizens 陣列長度上限：擋存檔異常巨大陣列撐爆記憶體 */
+const MAX_CITIZENS = 100000;
 
 export interface Migration {
   /** 此遷移把存檔從版本 from 升到 from+1 */
@@ -15,8 +24,26 @@ export function serializeGameState(state: GameState): string {
 }
 
 /** 已知遷移的 registry：v1→v2 僅是 Command 聯集擴充（新增 placeBuilding/removeBuilding），
- *  v1 形狀本身即合法 v2，遷移函式原樣放行即可。deserializeGameState 預設吃這份清單。 */
-export const SAVE_MIGRATIONS: Migration[] = [{ from: 1, migrate: (raw) => raw }];
+ *  v1 形狀本身即合法 v2，遷移函式原樣放行即可；v2→v3 新增 citizens 欄位——缺欄才補空陣列
+ *  （v2 以前沒有居民系統，空城即正確語義）；raw 已有 citizens 鍵（無論值是否合法）一律保留原值，
+ *  交由後續 deserializeGameState 的欄位驗證逐一把關（避免遷移悄悄清空本該視為資料損毀的內容）。
+ *  deserializeGameState 預設吃這份清單。 */
+export const SAVE_MIGRATIONS: Migration[] = [
+  { from: 1, migrate: (raw) => raw },
+  {
+    from: 2,
+    migrate: (raw) => {
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        throw new Error(`SAVE_MIGRATIONS(v2→v3): 存檔必須是物件，收到 ${JSON.stringify(raw)}`);
+      }
+      const record = raw as Record<string, unknown>;
+      if ('citizens' in record) {
+        return record;
+      }
+      return { ...record, citizens: [] };
+    },
+  },
+];
 
 /** 依序套用 from=fromVersion..toVersion-1 的遷移；缺任一步即 throw，不部分套用 */
 export function applyMigrations(
@@ -111,6 +138,64 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
     }
   }
 
+  const citizens = raw.citizens;
+  if (!Array.isArray(citizens)) {
+    throw new Error(`deserializeGameState: citizens 必須是陣列，收到 ${typeof citizens}`);
+  }
+  if (citizens.length > MAX_CITIZENS) {
+    throw new Error(`deserializeGameState: citizens 長度不可超過 ${MAX_CITIZENS}，收到 ${citizens.length}`);
+  }
+  for (const [index, citizen] of (citizens as unknown[]).entries()) {
+    if (typeof citizen !== 'object' || citizen === null || Array.isArray(citizen)) {
+      throw new Error(`deserializeGameState: citizens[${index}] 必須是物件，收到 ${JSON.stringify(citizen)}`);
+    }
+    const c = citizen as Record<string, unknown>;
+    if (typeof c.id !== 'string' || c.id.length === 0) {
+      throw new Error(`deserializeGameState: citizens[${index}].id 必須是非空字串，收到 ${JSON.stringify(c.id)}`);
+    }
+    if (c.id.length > MAX_CITIZEN_ID_LENGTH) {
+      throw new Error(
+        `deserializeGameState: citizens[${index}].id 長度不可超過 ${MAX_CITIZEN_ID_LENGTH}，收到 ${c.id.length}`,
+      );
+    }
+    if (typeof c.home !== 'string' || c.home.length === 0) {
+      throw new Error(`deserializeGameState: citizens[${index}].home 必須是非空字串，收到 ${JSON.stringify(c.home)}`);
+    }
+    if (c.home.length > MAX_CITIZEN_ID_LENGTH) {
+      throw new Error(
+        `deserializeGameState: citizens[${index}].home 長度不可超過 ${MAX_CITIZEN_ID_LENGTH}，收到 ${c.home.length}`,
+      );
+    }
+    // job 為 null 代表失業；空字串是「有 id 卻是空的」的資料錯誤，一律拒收
+    if (c.job !== null && (typeof c.job !== 'string' || c.job.length === 0)) {
+      throw new Error(
+        `deserializeGameState: citizens[${index}].job 必須是非空字串或 null，收到 ${JSON.stringify(c.job)}`,
+      );
+    }
+    if (typeof c.job === 'string' && c.job.length > MAX_CITIZEN_ID_LENGTH) {
+      throw new Error(
+        `deserializeGameState: citizens[${index}].job 長度不可超過 ${MAX_CITIZEN_ID_LENGTH}，收到 ${c.job.length}`,
+      );
+    }
+    // 居民座標是世界座標，容許浮點；只擋 NaN/Infinity（JSON 中會是 null）
+    if (typeof c.x !== 'number' || !Number.isFinite(c.x)) {
+      throw new Error(`deserializeGameState: citizens[${index}].x 必須是有限數值，收到 ${JSON.stringify(c.x)}`);
+    }
+    if (Math.abs(c.x) > MAX_CITIZEN_COORD_ABS) {
+      throw new Error(
+        `deserializeGameState: citizens[${index}].x 絕對值不可超過 ${MAX_CITIZEN_COORD_ABS}，收到 ${c.x}`,
+      );
+    }
+    if (typeof c.y !== 'number' || !Number.isFinite(c.y)) {
+      throw new Error(`deserializeGameState: citizens[${index}].y 必須是有限數值，收到 ${JSON.stringify(c.y)}`);
+    }
+    if (Math.abs(c.y) > MAX_CITIZEN_COORD_ABS) {
+      throw new Error(
+        `deserializeGameState: citizens[${index}].y 絕對值不可超過 ${MAX_CITIZEN_COORD_ABS}，收到 ${c.y}`,
+      );
+    }
+  }
+
   const pendingCommands = raw.pendingCommands;
   if (!Array.isArray(pendingCommands)) {
     throw new Error(`deserializeGameState: pendingCommands 必須是陣列，收到 ${typeof pendingCommands}`);
@@ -126,6 +211,7 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
     rngState,
     resources: resources as Record<string, number>,
     buildings: buildings as Building[],
+    citizens: citizens as Citizen[],
     pendingCommands: pendingCommands as Command[],
   };
 }

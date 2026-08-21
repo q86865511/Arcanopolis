@@ -18,14 +18,32 @@ import { serializeGameState, deserializeGameState } from '../../src/core/save/sa
 import type { BuildingDef } from '../../src/data/types';
 
 // 精簡 fixture defs：不依賴 data/*.json，涵蓋單資源成本、多資源成本、非 1×1 佔地
-const houseDef: BuildingDef = { id: 'house', name: '房屋', size: { w: 1, h: 1 }, cost: { wood: 15 }, production: {} };
-const tavernDef: BuildingDef = { id: 'tavern', name: '酒館', size: { w: 2, h: 2 }, cost: { wood: 5 }, production: {} };
+const houseDef: BuildingDef = {
+  id: 'house',
+  name: '房屋',
+  size: { w: 1, h: 1 },
+  cost: { wood: 15 },
+  production: {},
+  housing: 0,
+  jobs: 0,
+};
+const tavernDef: BuildingDef = {
+  id: 'tavern',
+  name: '酒館',
+  size: { w: 2, h: 2 },
+  cost: { wood: 5 },
+  production: {},
+  housing: 0,
+  jobs: 0,
+};
 const barracksDef: BuildingDef = {
   id: 'barracks',
   name: '兵營',
   size: { w: 1, h: 1 },
   cost: { wood: 10, stone: 5 },
   production: {},
+  housing: 0,
+  jobs: 0,
 };
 const defs: BuildingDef[] = [houseDef, tavernDef, barracksDef];
 

@@ -14,4 +14,20 @@ export interface BuildingDef {
   cost: Record<string, number>;
   /** 每 tick 產量：資源 id → 數量；無生產則為空物件 */
   production: Record<string, number>;
+  /** 可容納居民數；資料表省略時由 loader 正規化為 0 */
+  housing: number;
+  /** 可提供工作數；資料表省略時由 loader 正規化為 0 */
+  jobs: number;
+}
+
+/** 人口數值常數表，對應 data\population.json。「Day」＝一個遊戲日（見 core\sim\time.ts）。 */
+export interface PopulationConfig {
+  /** 每位居民每日消耗糧食（可為浮點） */
+  foodPerCitizenPerDay: number;
+  /** 糧食充足時每日新增居民數 */
+  growthPerDay: number;
+  /** 觸發成長所需的糧食存量（以「可供全城吃幾日」計） */
+  growthFoodReserveDays: number;
+  /** 糧食耗盡時每日餓死居民數 */
+  starvationDeathsPerDay: number;
 }

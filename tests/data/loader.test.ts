@@ -22,6 +22,8 @@ function validBuildings(): BuildingDef[] {
       size: { w: 2, h: 2 },
       cost: { wood: 10 },
       production: { wood: 2 },
+      housing: 0,
+      jobs: 0,
     },
   ];
 }
@@ -59,6 +61,10 @@ describe('parseResourceDefs（R2）', () => {
       { id: 'wood', name: '木材2' },
     ];
     expect(() => parseResourceDefs(input)).toThrow(/wood/);
+  });
+
+  it('元素含未知欄位 → throw 且訊息含該欄位名', () => {
+    expect(() => parseResourceDefs([{ id: 'wood', name: '木材', extra: 1 }])).toThrow(/extra/);
   });
 });
 
@@ -111,6 +117,18 @@ describe('parseBuildingDefs（R2）', () => {
   it('id 重複 → throw，訊息含重複的 id（出錯位置描述）', () => {
     const base = validBuildings()[0];
     expect(() => parseBuildingDefs([base, { ...base }], resourceIds)).toThrow(/lumber-camp/);
+  });
+
+  it('元素含未知欄位 → throw 且訊息含該欄位名', () => {
+    const base = validBuildings()[0];
+    expect(() => parseBuildingDefs([{ ...base, extra: 1 }], resourceIds)).toThrow(/extra/);
+  });
+
+  it('size 含未知欄位 → throw 且訊息含該欄位名', () => {
+    const base = validBuildings()[0];
+    expect(() =>
+      parseBuildingDefs([{ ...base, size: { w: 2, h: 2, depth: 1 } }], resourceIds),
+    ).toThrow(/depth/);
   });
 });
 

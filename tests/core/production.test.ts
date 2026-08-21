@@ -17,6 +17,8 @@ function makeDefs(): BuildingDef[] {
       size: { w: 2, h: 2 },
       cost: { wood: 10 },
       production: { wood: 2 },
+      housing: 0,
+      jobs: 0,
     },
     {
       id: 'quarry',
@@ -24,6 +26,8 @@ function makeDefs(): BuildingDef[] {
       size: { w: 2, h: 2 },
       cost: { wood: 15 },
       production: { stone: 3 },
+      housing: 0,
+      jobs: 0,
     },
     {
       id: 'house',
@@ -31,6 +35,8 @@ function makeDefs(): BuildingDef[] {
       size: { w: 1, h: 1 },
       cost: { wood: 5 },
       production: {},
+      housing: 0,
+      jobs: 0,
     },
   ];
 }
@@ -168,6 +174,8 @@ describe('createProductionSystem（R4）', () => {
         size: { w: 1, h: 1 },
         cost: {},
         production: { constructor: 5, toString: 2 },
+        housing: 0,
+        jobs: 0,
       },
     ];
     const sys = createProductionSystem(defs);

@@ -4,12 +4,23 @@ import { createRng } from '../sim/rng';
 import type { Command } from '../sim/commands';
 
 /** 存檔格式版本。新增/變更欄位時遞增，並在 src/core/save/save.ts 補對應 Migration。 */
-export const SAVE_SCHEMA_VERSION = 2;
+export const SAVE_SCHEMA_VERSION = 3;
 
 export interface Building {
   id: string;
   type: string;
   /** 格座標 */
+  x: number;
+  y: number;
+}
+
+export interface Citizen {
+  id: string;
+  /** 居住建築的 Building.id */
+  home: string;
+  /** 工作建築的 Building.id；失業為 null */
+  job: string | null;
+  /** 世界座標（非格座標），可為浮點數——居民在格與格之間移動 */
   x: number;
   y: number;
 }
@@ -21,6 +32,7 @@ export interface GameState {
   rngState: number;
   resources: Record<string, number>;
   buildings: Building[];
+  citizens: Citizen[];
   /** 尚未套用的指令佇列，隨 state 一併存檔，避免存檔遺失 pending 指令 */
   pendingCommands: Command[];
 }
@@ -32,6 +44,7 @@ export function createInitialState(seed: number): GameState {
     rngState: createRng(seed).getState(),
     resources: {},
     buildings: [],
+    citizens: [],
     pendingCommands: [],
   };
 }

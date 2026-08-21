@@ -1,0 +1,6 @@
+{
+  "foodPerCitizenPerDay": 1,
+  "growthPerDay": 1,
+  "growthFoodReserveDays": 5,
+  "starvationDeathsPerDay": 1
+}
