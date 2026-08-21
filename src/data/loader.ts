@@ -15,6 +15,9 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
+/** 建築 footprint 邊長上限：擋住資料表打錯（如多打一個 0）撐爆佔格計算 */
+const MAX_BUILDING_SIZE = 16;
+
 /** 驗證 amounts 物件（cost/production）：key 須在 resourceIds 內、value 須為有限非負數 */
 function validateAmounts(
   amounts: unknown,
@@ -92,6 +95,11 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
     }
     if (!isPlainObject(size) || !isPositiveInteger(size.w) || !isPositiveInteger(size.h)) {
       throw new Error(`parseBuildingDefs: 建築 "${id}" 的 size.w/size.h 必須是正整數，收到 ${JSON.stringify(size)}`);
+    }
+    if (size.w > MAX_BUILDING_SIZE || size.h > MAX_BUILDING_SIZE) {
+      throw new Error(
+        `parseBuildingDefs: 建築 "${id}" 的 size.w/size.h 不可超過 ${MAX_BUILDING_SIZE}，收到 ${JSON.stringify(size)}`,
+      );
     }
     const validCost = validateAmounts(cost, 'cost', id, resourceIds);
     const validProduction = validateAmounts(production, 'production', id, resourceIds);

@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "simulate": "tsx src/tools/fastforward.ts"
+    "simulate": "tsx src/tools/fastforward.ts",
+    "screenshot": "node scripts/screenshot.mjs"
   },
   "devDependencies": {
     "playwright": "^1.62.1",

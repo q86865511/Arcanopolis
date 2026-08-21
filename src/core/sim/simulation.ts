@@ -5,11 +5,13 @@ import { createRng } from './rng';
 import type { System } from './system';
 import { timeFromTick } from './time';
 import type { GameState } from '../world/state';
+import type { BuildingDef } from '../../data/types';
 
 export class Simulation {
   constructor(
     private readonly state: GameState,
     private readonly systems: System[],
+    private readonly defs: BuildingDef[] = [],
   ) {}
 
   /** 指令不立即生效，於下一次 tick 開頭依 FIFO 套用；非法指令在入口即拒收，保持批次套用原子
@@ -31,7 +33,7 @@ export class Simulation {
     // 先取出整批再清空：system 於本 tick 內 enqueue 的指令留到下一 tick。
     const batch = this.state.pendingCommands.splice(0, this.state.pendingCommands.length);
     for (const command of batch) {
-      applyCommand(this.state, command);
+      applyCommand(this.state, command, this.defs);
     }
 
     this.state.tick += 1;

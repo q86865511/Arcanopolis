@@ -4,7 +4,7 @@ import { createRng } from '../sim/rng';
 import type { Command } from '../sim/commands';
 
 /** 存檔格式版本。新增/變更欄位時遞增，並在 src/core/save/save.ts 補對應 Migration。 */
-export const SAVE_SCHEMA_VERSION = 1;
+export const SAVE_SCHEMA_VERSION = 2;
 
 export interface Building {
   id: string;

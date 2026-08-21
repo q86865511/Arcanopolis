@@ -145,7 +145,7 @@ export function runFastForward(options: FastForwardOptions): FastForwardResult {
 
   const state = createInitialState(options.seed);
   state.buildings = options.buildings.map((building) => ({ ...building }));
-  const simulation = new Simulation(state, [createProductionSystem(buildingDefs)]);
+  const simulation = new Simulation(state, [createProductionSystem(buildingDefs)], buildingDefs);
   const rows = [['tick', 'totalDay', ...resourceDefs.map((definition) => definition.id)].join(','), csvRow(state)];
 
   for (let sampleTick = options.sampleEvery; sampleTick <= options.ticks; sampleTick += options.sampleEvery) {

@@ -2,9 +2,20 @@
 
 ## 目前狀態
 
-**M1 模擬核心完成**（128 tests 全綠、tsc 零錯誤）。下一里程碑：M2 呈現層（tile 地圖渲染、建築擺放 UI、Phaser 接線）。
+**M2 呈現層完成**（177 tests 全綠、tsc 零錯誤）：遊戲已可玩——等距地圖、建築擺放/拆除、
+資源 HUD、即時模擬（10 tick/秒）、Playwright 截圖迴路。待使用者實玩驗收後進 M3（居民系統）。
 
 ## 已完成
+
+- [2026-08-22] **M2-W2 完成**：core 建築指令（placeBuilding/removeBuilding＋佔格＋成本，TDD）、
+  擺放 UI＋HUD＋固定時步遊戲迴圈（雙攝影機、sprite diff）、Playwright 截圖工具（npm run screenshot）。
+  雙審（Claude 全波＋Codex 限 T2 存檔面）合併 12 項全修：指令數值/字串邊界、**id 帶 #tick 防 ABA**、
+  **SAVE_SCHEMA_VERSION 升 v2＋no-op 遷移**（清掉 v1 端到端遷移測試債）、CLI defs 注入、
+  HUD 誤觸防護、size 上限。終態 177 tests 綠。
+- [2026-08-21] **M2-W1 完成**：素材批（等距地形 tile×3＋伐木場/採石場，Codex 生圖）、
+  等距座標模組 iso.ts（TDD）、Phaser 3.90 接線（Boot/City 場景、攝影機、修復 lock 檔既有損壞）。
+  單審 16 條全修；調色盤經 remap 實驗裁決放寬（DB32 為指引非硬約束）；
+  素材管線 v3（tile 用 fuzz 白背去除修邊緣光暈）。
 
 - [2026-08-21] **M1-W2 完成**：資料驅動層（ResourceDef/BuildingDef、loader 嚴格驗證、
   data 兩表、production system）＋存檔 v1（SAVE_SCHEMA_VERSION、pendingCommands 入 state、
@@ -29,15 +40,19 @@
 
 ## 進行中
 
-（無——M0 已收尾，待啟動 M1）
+（無——M2 已收尾，待使用者實玩驗收）
 
 ## 待辦
 
-- M2 呈現層；M3 居民；M4 生產鏈與經濟（MVP 驗收）；M5 塔防；M6 冒險者公會；M7 魔法；M8 種族；M9 上架。
-- [審查登記] SAVE_SCHEMA_VERSION 升 v2 的任務必補：真實舊版存檔端到端遷移測試＋「版本落後無遷移即 throw」
-  情境（v1 結構上無法測，使用者核可等價覆蓋）；遷移撰寫紀律——每次升版須同步擴充 deserialize 欄位驗證（R2-7）。
-- [審查登記] M2 接存檔讀取 UI 時：載入後對 buildings type 做進場全量檢查（R2-4，目前未知 type 於首 tick 才爆）。
-- [審查登記] fastforward main 接線無自動化測試（I/O 皮層排除，R2-6）；改動 main 參數傳遞時手動冒煙。
+- M3 居民；M4 生產鏈與經濟（MVP 驗收）；M5 塔防；M6 冒險者公會；M7 魔法；M8 種族；M9 上架。
+- [審查登記] 存檔載入 UI（未來任務）落地時：載入後對 buildings type 做進場全量檢查（未知 type 目前於
+  首 tick 才爆）；並統一 occupancy（1×1 fallback）與 production（throw）對未知 type 的策略。
+- [審查登記] pending 指令語意隨資料表版本漂移屬資料驅動設計限制（存檔綁資料表版本）；未來 schema
+  升版任務評估是否對指令快照成本。遷移撰寫紀律：每次升版同步擴充 deserialize 欄位驗證。
+- [審查登記] fastforward main 接線無自動化測試（I/O 皮層排除）；改動 main 參數傳遞時手動冒煙。
+- [審查登記] uiCamera 尺寸取 create 當下值：改用 RESIZE/FIT scale 模式時需同步處理 HUD 裁切。
+- ~~SAVE_SCHEMA_VERSION 升 v2 必補端到端遷移測試~~——已於 M2-W2 修正批完成（v1 存檔經 no-op 遷移
+  載入＋無遷移 throw＋續跑測試均已落地）。
 
 ## 已知問題
 

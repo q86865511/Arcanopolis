@@ -14,6 +14,10 @@ export function serializeGameState(state: GameState): string {
   return JSON.stringify(state);
 }
 
+/** 已知遷移的 registry：v1→v2 僅是 Command 聯集擴充（新增 placeBuilding/removeBuilding），
+ *  v1 形狀本身即合法 v2，遷移函式原樣放行即可。deserializeGameState 預設吃這份清單。 */
+export const SAVE_MIGRATIONS: Migration[] = [{ from: 1, migrate: (raw) => raw }];
+
 /** 依序套用 from=fromVersion..toVersion-1 的遷移；缺任一步即 throw，不部分套用 */
 export function applyMigrations(
   raw: unknown,
@@ -36,7 +40,7 @@ export function applyMigrations(
   return current;
 }
 
-export function deserializeGameState(json: string, migrations: Migration[] = []): GameState {
+export function deserializeGameState(json: string, migrations: Migration[] = SAVE_MIGRATIONS): GameState {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);

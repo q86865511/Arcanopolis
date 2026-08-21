@@ -16,8 +16,8 @@ import {
 } from '../../src/core/save/save';
 
 describe('R1：GameState 擴充 schemaVersion + pendingCommands', () => {
-  it('state.ts 匯出常數 SAVE_SCHEMA_VERSION = 1', () => {
-    expect(SAVE_SCHEMA_VERSION).toBe(1);
+  it('state.ts 匯出常數 SAVE_SCHEMA_VERSION = 2（M3：Command 聯集擴充升版）', () => {
+    expect(SAVE_SCHEMA_VERSION).toBe(2);
   });
 
   it('createInitialState 填入 schemaVersion 與空 pendingCommands', () => {
@@ -243,5 +243,45 @@ describe('R5：遷移 registry（Migration + applyMigrations）', () => {
     const restored = deserializeGameState(json, []);
 
     expect(restored).toEqual(state);
+  });
+});
+
+describe('M3：schema v2 遷移（SAVE_MIGRATIONS，真實舊版 v1 存檔端到端）', () => {
+  /** 手工構造的合法 v1 存檔（schemaVersion:1，含一筆 pending addResource 指令）。 */
+  function v1SaveJson(): string {
+    const v1 = {
+      schemaVersion: 1,
+      tick: 5,
+      rngState: 12345,
+      resources: { wood: 10 },
+      buildings: [{ id: 'house@0,0#0', type: 'house', x: 0, y: 0 }],
+      pendingCommands: [{ type: 'addResource', resource: 'wood', amount: 3 }],
+    };
+    return JSON.stringify(v1);
+  }
+
+  it('(a) 預設參數 deserialize v1 存檔成功：schemaVersion 升為目前版本、資料完整保留', () => {
+    const restored = deserializeGameState(v1SaveJson());
+
+    expect(restored.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
+    expect(restored.tick).toBe(5);
+    expect(restored.rngState).toBe(12345);
+    expect(restored.resources).toEqual({ wood: 10 });
+    expect(restored.buildings).toEqual([{ id: 'house@0,0#0', type: 'house', x: 0, y: 0 }]);
+    expect(restored.pendingCommands).toEqual([{ type: 'addResource', resource: 'wood', amount: 3 }]);
+  });
+
+  it('(b) 同一 v1 JSON 以 deserializeGameState(json, []) 呼叫 → throw（版本落後且無對應遷移）', () => {
+    expect(() => deserializeGameState(v1SaveJson(), [])).toThrow();
+  });
+
+  it('(c) v1 存檔還原後可用 Simulation 續跑，且還原出的 pending 指令於下一 tick 生效', () => {
+    const restored = deserializeGameState(v1SaveJson());
+    const sim = new Simulation(restored, []);
+
+    sim.tick();
+
+    expect(restored.resources.wood).toBe(13); // 10 + pending 的 addResource wood:3
+    expect(restored.tick).toBe(6);
   });
 });

@@ -23,7 +23,11 @@ export class CameraController {
     const input = this.scene.input;
     this.scene.cameras.main.setZoom(ZOOM_LEVELS[this.zoomIndex]);
 
-    input.on(Phaser.Input.Events.POINTER_DOWN, () => {
+    input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
+      // 只認左鍵：右鍵留給拆除（BuildController），按著右鍵不該把地圖拖走
+      if (!pointer.leftButtonDown()) {
+        return;
+      }
       this.dragging = true;
     });
     input.on(Phaser.Input.Events.POINTER_UP, () => {
@@ -35,7 +39,7 @@ export class CameraController {
     });
 
     input.on(Phaser.Input.Events.POINTER_MOVE, (pointer: Phaser.Input.Pointer) => {
-      if (!this.dragging || !pointer.isDown) {
+      if (!this.dragging || !pointer.leftButtonDown()) {
         return;
       }
       const camera = this.scene.cameras.main;

@@ -1,31 +1,48 @@
-// M2 展示用的假世界：呈現層在真正的存檔／建造流程接上之前的資料來源。
-// 只「產生」state，不修改它——render 層對 core 狀態一律唯讀（見 CLAUDE.md 架構鐵則 1）。
-// T3 接上真實 state 後，把 CityScene 的資料來源換掉即可，其餘渲染程式不動。
+// M2 的世界建立點：組出「一座空城 + 開局資源 + 掛好 system 的 Simulation」交給呈現層。
+// render 對 state 一律唯讀（見 CLAUDE.md 架構鐵則 1）——本檔的 addResource 屬「建立 fixture」，
+// 只在世界誕生的那一刻寫入；世界跑起來之後的一切變更都必須經 sim.enqueue 下指令。
 
-import { createInitialState, type GameState } from '../core/world/state';
+import { Simulation } from '../core/sim/simulation';
+import { createProductionSystem } from '../core/systems/production';
+import { addResource, createInitialState, type GameState } from '../core/world/state';
 import { TERRAIN_TEXTURES } from './assets';
+import { BUILDING_DEFS, RESOURCE_DEFS } from './defs';
 
 /** demo 地圖邊長（格）。 */
 export const GRID_SIZE = 12;
 
 const DEMO_SEED = 1;
 
-const DEMO_BUILDINGS: ReadonlyArray<{ type: string; x: number; y: number }> = [
-  { type: 'lumber-camp', x: 2, y: 2 },
-  { type: 'quarry', x: 5, y: 3 },
-  { type: 'farm', x: 3, y: 5 },
-  { type: 'house', x: 6, y: 6 },
+/**
+ * 開局資源：夠蓋十來棟起步建築、又不足以無腦鋪滿全圖——
+ * 這樣「資源不足」的紅色預覽在試玩前幾分鐘內就看得到，是刻意的。
+ */
+const STARTING_RESOURCES: ReadonlyArray<readonly [string, number]> = [
+  ['wood', 500],
+  ['stone', 200],
+  ['food', 100],
+  ['gold', 100],
 ];
 
-export function createDemoState(): GameState {
+export interface DemoWorld {
+  state: GameState;
+  sim: Simulation;
+}
+
+const validResourceIds = new Set(RESOURCE_DEFS.map((def) => def.id));
+
+export function createDemoWorld(): DemoWorld {
   const state = createInitialState(DEMO_SEED);
-  state.buildings = DEMO_BUILDINGS.map((b, index) => ({
-    id: `demo-${index + 1}`,
-    type: b.type,
-    x: b.x,
-    y: b.y,
-  }));
-  return state;
+  for (const [id, amount] of STARTING_RESOURCES) {
+    // 資料表改版留下幽靈 id 時要當場曝光，不能讓開局資源悄悄少一項（見 CLAUDE.md 資料驅動鐵則）
+    if (!validResourceIds.has(id)) {
+      throw new Error(`createDemoWorld: STARTING_RESOURCES 引用未知資源 id "${id}"`);
+    }
+    addResource(state, id, amount);
+  }
+  // 初始無建築：城市完全由玩家蓋出來
+  const sim = new Simulation(state, [createProductionSystem(BUILDING_DEFS)], BUILDING_DEFS);
+  return { state, sim };
 }
 
 /**
