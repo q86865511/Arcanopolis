@@ -22,7 +22,16 @@
 
 ## 開發指令
 
-（M1 scaffold 後補：dev server、測試、快轉模擬器 CLI。）
+- `npm run test`（vitest run）；`npm run typecheck`（tsc --noEmit）——宣稱完成前兩者都要實跑。
+- `npm run dev`（Vite dev server）；`npm run build`。
+- 快轉模擬器 CLI：M1-T4 後補。
+
+## core 慣例（M1 起生效）
+
+- 資源讀寫一律走 `src\core\world\state.ts` 的 `getResource`/`addResource`（own-property 語義），
+  不得直接索引 `state.resources`（資源 id 可能與 Object.prototype 成員同名）。
+- `System.update` 必須同步；ctx 僅在該 tick 內有效，不得留存 ctx.rng 跨 tick 使用。
+- 指令一律經 `Simulation.enqueue`（入口驗證），於下一 tick 開頭 FIFO 套用。
 
 ## Git
 

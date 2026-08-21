@@ -2,9 +2,15 @@
 
 ## 目前狀態
 
-M0 完成：art-bible 已核可、生圖與後處理管線端到端驗證通過，等待使用者啟動 M1（/pipeline）。
+M1 pipeline 進行中：W1（scaffold＋模擬核心骨架）完成並經雙審＋修正＋複審；W2（資源/存檔/快轉 CLI）待派工。
 
 ## 已完成
+
+- [2026-08-21] **M1-W1 完成**：Vite+TS+Vitest scaffold；決定論模擬核心（mulberry32 RNG、
+  時間系統 600 tick/日×30 日/季×四季、GameState、System 介面、指令佇列、固定時步 Simulation）。
+  TDD（紅綠證據＋manifest）；雙審（reviewer 突變測試＋Codex 探針）出 14 條裁決，1-11 全修，
+  複審 16 突變全殺再出 N 系列，N1-N5/N8-N11 全修；終態 50 tests 綠、tsc 0 錯。
+  證據：`.pipeline/reviews/`（3 檔）與 `.pipeline/tdd/`。
 
 - [2026-08-21] **M0 完成**：art-bible 經 5 張實圖核可（DB32/等距 64×32/左上光源/1px 描邊/
   無底座規則）；工具鏈裝齊（rembg 2.0.76、ImageMagick 7.1.2、pngquant 2.17.0）；
