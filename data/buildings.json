@@ -2,21 +2,21 @@
   {
     "id": "lumber-camp",
     "name": "伐木場",
-    "size": { "w": 2, "h": 2 },
+    "size": { "w": 1, "h": 1 },
     "cost": { "wood": 20, "gold": 10 },
     "production": { "wood": 2 }
   },
   {
     "id": "quarry",
     "name": "採石場",
-    "size": { "w": 2, "h": 2 },
+    "size": { "w": 1, "h": 1 },
     "cost": { "wood": 30, "gold": 15 },
     "production": { "stone": 2 }
   },
   {
     "id": "farm",
     "name": "農場",
-    "size": { "w": 3, "h": 3 },
+    "size": { "w": 1, "h": 1 },
     "cost": { "wood": 25, "gold": 5 },
     "production": { "food": 3 }
   },

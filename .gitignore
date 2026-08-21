@@ -1,5 +1,6 @@
 node_modules/
-.claude/scheduled_tasks.lock
+.claude/*
+!.claude/launch.json
 dist/
 .pipeline/
 .env

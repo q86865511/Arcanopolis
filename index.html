@@ -3,6 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <title>Arcanopolis</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      /* 置中交給 Phaser 的 autoCenter（game.ts），這裡再置中會兩者相加、位移加倍 */
+      #app {
+        height: 100%;
+      }
+      #app canvas {
+        display: block;
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>

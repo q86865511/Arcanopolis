@@ -45,6 +45,12 @@
 
 ## 重要決策紀錄
 
+- [2026-08-21] 調色盤定案：DB32 為風格指引非硬約束，每張素材獨立 ≤32 色量化、不做全域 remap
+  （實驗證實 remap 劣化）；全域色彩效果留給 shader。素材後處理管線：tile 類用 fuzz 白背去除
+  （非 rembg），建築類 rembg＋alpha 閾值化。
+- [2026-08-21] 建築佔格與素材對齊：lumber-camp/quarry/farm 資料表改 1×1（配 64 寬 sprite）；
+  2×2 建築（tavern 等）需 128 寬素材，量產時依 art-bible 尺寸規格。
+
 - [2026-08-21] 建築 sprite 無底座規則：地面一律由遊戲地形 tile 提供，生圖前綴帶
   「building only with no ground base tile」；地形類素材另有 tile 版前綴（見 art-bible）。
 
