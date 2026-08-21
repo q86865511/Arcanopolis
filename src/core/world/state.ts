@@ -1,6 +1,10 @@
 // GameState：純資料（可 JSON round-trip），不含任何方法或類別實例——存檔即序列化本物件。
 
 import { createRng } from '../sim/rng';
+import type { Command } from '../sim/commands';
+
+/** 存檔格式版本。新增/變更欄位時遞增，並在 src/core/save/save.ts 補對應 Migration。 */
+export const SAVE_SCHEMA_VERSION = 1;
 
 export interface Building {
   id: string;
@@ -11,19 +15,24 @@ export interface Building {
 }
 
 export interface GameState {
+  schemaVersion: number;
   tick: number;
   /** RNG 目前狀態，每 tick 由 Simulation 寫回，使存檔可完整還原隨機序列 */
   rngState: number;
   resources: Record<string, number>;
   buildings: Building[];
+  /** 尚未套用的指令佇列，隨 state 一併存檔，避免存檔遺失 pending 指令 */
+  pendingCommands: Command[];
 }
 
 export function createInitialState(seed: number): GameState {
   return {
+    schemaVersion: SAVE_SCHEMA_VERSION,
     tick: 0,
     rngState: createRng(seed).getState(),
     resources: {},
     buildings: [],
+    pendingCommands: [],
   };
 }
 

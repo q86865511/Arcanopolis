@@ -1,0 +1,127 @@
+// 存檔序列化與遷移。GameState 為純資料，序列化即 JSON；還原時逐欄驗證，
+// 版本不符時先跑 migrations 補到 SAVE_SCHEMA_VERSION 再驗證欄位內容。
+
+import { validateCommand, type Command } from '../sim/commands';
+import { SAVE_SCHEMA_VERSION, type Building, type GameState } from '../world/state';
+
+export interface Migration {
+  /** 此遷移把存檔從版本 from 升到 from+1 */
+  from: number;
+  migrate: (raw: unknown) => unknown;
+}
+
+export function serializeGameState(state: GameState): string {
+  return JSON.stringify(state);
+}
+
+/** 依序套用 from=fromVersion..toVersion-1 的遷移；缺任一步即 throw，不部分套用 */
+export function applyMigrations(
+  raw: unknown,
+  fromVersion: number,
+  toVersion: number,
+  migrations: Migration[],
+): unknown {
+  let current = raw;
+  for (let version = fromVersion; version < toVersion; version++) {
+    const migration = migrations.find((m) => m.from === version);
+    if (!migration) {
+      throw new Error(
+        `applyMigrations: 缺少 from=${version} 的遷移（需要 ${fromVersion}→${toVersion}），收到 migrations=[${migrations
+          .map((m) => m.from)
+          .join(',')}]`,
+      );
+    }
+    current = migration.migrate(current);
+  }
+  return current;
+}
+
+export function deserializeGameState(json: string, migrations: Migration[] = []): GameState {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error(`deserializeGameState: JSON 解析失敗，收到 ${json}`);
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`deserializeGameState: 存檔必須是物件，收到 ${typeof parsed}`);
+  }
+
+  let raw = parsed as Record<string, unknown>;
+
+  const schemaVersion = raw.schemaVersion;
+  if (typeof schemaVersion !== 'number' || !Number.isInteger(schemaVersion) || schemaVersion <= 0) {
+    throw new Error(`deserializeGameState: schemaVersion 必須是正整數，收到 ${schemaVersion}`);
+  }
+  if (schemaVersion > SAVE_SCHEMA_VERSION) {
+    throw new Error(
+      `deserializeGameState: schemaVersion 超過目前支援版本 ${SAVE_SCHEMA_VERSION}，收到 ${schemaVersion}`,
+    );
+  }
+  if (schemaVersion < SAVE_SCHEMA_VERSION) {
+    const migrated = applyMigrations(raw, schemaVersion, SAVE_SCHEMA_VERSION, migrations);
+    if (typeof migrated !== 'object' || migrated === null || Array.isArray(migrated)) {
+      throw new Error(`deserializeGameState: 遷移輸出必須是物件，收到 ${JSON.stringify(migrated)}`);
+    }
+    raw = migrated as Record<string, unknown>;
+  }
+
+  const tick = raw.tick;
+  if (typeof tick !== 'number' || !Number.isInteger(tick) || tick < 0) {
+    throw new Error(`deserializeGameState: tick 必須是非負整數，收到 ${tick}`);
+  }
+
+  const rngState = raw.rngState;
+  if (typeof rngState !== 'number' || !Number.isInteger(rngState) || rngState < 0 || rngState > 0xffffffff) {
+    throw new Error(`deserializeGameState: rngState 必須是 0~4294967295 的整數，收到 ${rngState}`);
+  }
+
+  const resources = raw.resources;
+  if (typeof resources !== 'object' || resources === null || Array.isArray(resources)) {
+    throw new Error(`deserializeGameState: resources 必須是物件，收到 ${typeof resources}`);
+  }
+  for (const [key, value] of Object.entries(resources as Record<string, unknown>)) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`deserializeGameState: resources.${key} 必須是有限數值，收到 ${value}`);
+    }
+  }
+
+  const buildings = raw.buildings;
+  if (!Array.isArray(buildings)) {
+    throw new Error(`deserializeGameState: buildings 必須是陣列，收到 ${typeof buildings}`);
+  }
+  for (const [index, building] of (buildings as unknown[]).entries()) {
+    if (typeof building !== 'object' || building === null || Array.isArray(building)) {
+      throw new Error(`deserializeGameState: buildings[${index}] 必須是物件，收到 ${JSON.stringify(building)}`);
+    }
+    const b = building as Record<string, unknown>;
+    if (typeof b.id !== 'string' || b.id.length === 0) {
+      throw new Error(`deserializeGameState: buildings[${index}].id 必須是非空字串，收到 ${JSON.stringify(b.id)}`);
+    }
+    if (typeof b.type !== 'string' || b.type.length === 0) {
+      throw new Error(`deserializeGameState: buildings[${index}].type 必須是非空字串，收到 ${JSON.stringify(b.type)}`);
+    }
+    if (typeof b.x !== 'number' || !Number.isInteger(b.x) || typeof b.y !== 'number' || !Number.isInteger(b.y)) {
+      throw new Error(`deserializeGameState: buildings[${index}].x/y 必須是整數，收到 (${b.x}, ${b.y})`);
+    }
+  }
+
+  const pendingCommands = raw.pendingCommands;
+  if (!Array.isArray(pendingCommands)) {
+    throw new Error(`deserializeGameState: pendingCommands 必須是陣列，收到 ${typeof pendingCommands}`);
+  }
+  for (const command of pendingCommands) {
+    validateCommand(command as Command);
+  }
+
+  return {
+    // 遷移後即為當前版本；沿用舊值會使升版存檔標錯版本、下次載入重跑遷移（雙重遷移毀檔）。
+    schemaVersion: SAVE_SCHEMA_VERSION,
+    tick,
+    rngState,
+    resources: resources as Record<string, number>,
+    buildings: buildings as Building[],
+    pendingCommands: pendingCommands as Command[],
+  };
+}

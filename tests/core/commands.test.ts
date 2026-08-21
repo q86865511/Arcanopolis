@@ -119,6 +119,21 @@ describe('指令佇列：enqueue 於下一次 tick 開頭依 FIFO 套用後清�
     expect(Object.getOwnPropertyDescriptor(roundTripped.resources, '__proto__')?.value).toBe(3);
   });
 
+  it('繞過 enqueue 直接 push 非法指令 → tick 整批重驗 throw：零套用、佇列原封不動', () => {
+    const state = createInitialState(1);
+    const sim = new Simulation(state, []);
+
+    sim.enqueue({ type: 'addResource', resource: 'wood', amount: 5 });
+    state.pendingCommands.push({ type: 'addResource', resource: 'stone', amount: Number.NaN });
+    sim.enqueue({ type: 'addResource', resource: 'gold', amount: 9 });
+
+    expect(() => sim.tick()).toThrow(/amount/);
+    expect(state.tick).toBe(0);
+    expect(state.resources.wood).toBeUndefined();
+    expect(state.resources.gold).toBeUndefined();
+    expect(state.pendingCommands).toHaveLength(3);
+  });
+
   it('amount 非有限數值（NaN/Infinity）→ enqueue 入口即 throw，批次保持原子', () => {
     const state = createInitialState(1);
     const sim = new Simulation(state, []);

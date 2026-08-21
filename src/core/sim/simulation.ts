@@ -7,25 +7,29 @@ import { timeFromTick } from './time';
 import type { GameState } from '../world/state';
 
 export class Simulation {
-  private readonly queue: Command[] = [];
-
   constructor(
     private readonly state: GameState,
     private readonly systems: System[],
   ) {}
 
-  /** 指令不立即生效，於下一次 tick 開頭依 FIFO 套用；非法指令在入口即拒收，保持批次套用原子 */
+  /** 指令不立即生效，於下一次 tick 開頭依 FIFO 套用；非法指令在入口即拒收，保持批次套用原子
+   *  佇列存於 state.pendingCommands（而非 Simulation 私有欄位），使存檔可攜帶尚未套用的指令。 */
   enqueue(command: Command): void {
     validateCommand(command);
-    this.queue.push(command);
+    this.state.pendingCommands.push(command);
   }
 
   // tick 語義：指令套用 → tick+1 → systems。ctx 以遞增後的 tick 組成，
   // 因此 system 眼中的時間從 tick=1 開始（第 1 日只出現 tickOfDay 1~599，tickOfDay 0 首見於第 2 日）；
   // ctx 僅在該 tick 內有效，system 不得留存 ctx.rng 供 tick 之外使用。
   tick(): void {
+    // 佇列在 state 上是公開資料（可能被繞過 enqueue 直接塞），套用前整批重驗：
+    // 驗證失敗時佇列原封不動、零套用，維持批次原子性。
+    for (const command of this.state.pendingCommands) {
+      validateCommand(command);
+    }
     // 先取出整批再清空：system 於本 tick 內 enqueue 的指令留到下一 tick。
-    const batch = this.queue.splice(0, this.queue.length);
+    const batch = this.state.pendingCommands.splice(0, this.state.pendingCommands.length);
     for (const command of batch) {
       applyCommand(this.state, command);
     }

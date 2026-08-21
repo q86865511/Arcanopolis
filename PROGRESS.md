@@ -2,9 +2,16 @@
 
 ## 目前狀態
 
-M1 pipeline 進行中：W1（scaffold＋模擬核心骨架）完成並經雙審＋修正＋複審；W2（資源/存檔/快轉 CLI）待派工。
+**M1 模擬核心完成**（128 tests 全綠、tsc 零錯誤）。下一里程碑：M2 呈現層（tile 地圖渲染、建築擺放 UI、Phaser 接線）。
 
 ## 已完成
+
+- [2026-08-21] **M1-W2 完成**：資料驅動層（ResourceDef/BuildingDef、loader 嚴格驗證、
+  data 兩表、production system）＋存檔 v1（SAVE_SCHEMA_VERSION、pendingCommands 入 state、
+  serialize/deserialize 逐欄驗證、applyMigrations＋gap 偵測）＋快轉 CLI
+  （`npm run simulate`，--buildings 情境、CSV 曲線；Codex gpt-5.6-sol 實作）。
+  單審（依使用者指示不派 Codex 第二審）出 13 條全修；複審 13/13 落實（突變驗證），
+  殘留 R2-1/2/3/5/8 修畢、R2-9 主迴圈實測誤報。終態 128 tests 綠。
 
 - [2026-08-21] **M1-W1 完成**：Vite+TS+Vitest scaffold；決定論模擬核心（mulberry32 RNG、
   時間系統 600 tick/日×30 日/季×四季、GameState、System 介面、指令佇列、固定時步 Simulation）。
@@ -26,8 +33,11 @@ M1 pipeline 進行中：W1（scaffold＋模擬核心骨架）完成並經雙審�
 
 ## 待辦
 
-- M1 模擬核心（tick／資源／建築資料表／存檔 v1／快轉模擬器）——以 /pipeline 執行。
 - M2 呈現層；M3 居民；M4 生產鏈與經濟（MVP 驗收）；M5 塔防；M6 冒險者公會；M7 魔法；M8 種族；M9 上架。
+- [審查登記] SAVE_SCHEMA_VERSION 升 v2 的任務必補：真實舊版存檔端到端遷移測試＋「版本落後無遷移即 throw」
+  情境（v1 結構上無法測，使用者核可等價覆蓋）；遷移撰寫紀律——每次升版須同步擴充 deserialize 欄位驗證（R2-7）。
+- [審查登記] M2 接存檔讀取 UI 時：載入後對 buildings type 做進場全量檢查（R2-4，目前未知 type 於首 tick 才爆）。
+- [審查登記] fastforward main 接線無自動化測試（I/O 皮層排除，R2-6）；改動 main 參數傳遞時手動冒煙。
 
 ## 已知問題
 

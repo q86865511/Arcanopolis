@@ -1,0 +1,6 @@
+[
+  { "id": "wood", "name": "木材" },
+  { "id": "stone", "name": "石材" },
+  { "id": "food", "name": "糧食" },
+  { "id": "gold", "name": "金幣" }
+]
