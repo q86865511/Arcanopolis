@@ -1,7 +1,9 @@
 // scripts/screenshot.mjs
 // 一鍵對遊戲畫面截圖的驗證工具：啟動 vite dev server → chromium headless 截圖 → 關閉 server。
 // 用法：node scripts/screenshot.mjs [--port 5199] [--wait 5000] [--out screenshots/latest.png]
+//                                   [--viewport 1280x720]
 // 5173 可能被其他 dev server 佔用，預設一律用 5199。
+// --viewport 用於驗證視窗自適應（Scale.RESIZE）：同一畫面換不同視窗尺寸各截一張比對。
 
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
@@ -11,9 +13,23 @@ import { chromium } from 'playwright';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+/** "1280x720" → { width, height }；格式不合或非正整數即拋錯（別讓 playwright 收到 NaN 視窗） */
+function parseViewport(text) {
+  const match = /^(\d+)[xX](\d+)$/.exec(text);
+  if (match === null) {
+    throw new Error(`screenshot: --viewport 格式須為 <寬>x<高>（例 1280x720），收到 ${text}`);
+  }
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (width <= 0 || height <= 0) {
+    throw new Error(`screenshot: --viewport 寬高必須是正整數，收到 ${text}`);
+  }
+  return { width, height };
+}
+
 function parseArgs(argv) {
   const values = new Map();
-  const supported = new Set(['--port', '--wait', '--out']);
+  const supported = new Set(['--port', '--wait', '--out', '--viewport']);
 
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index];
@@ -38,7 +54,9 @@ function parseArgs(argv) {
     throw new Error(`screenshot: --wait 必須是非負整數，收到 ${values.get('--wait')}`);
   }
 
-  return { port, wait, out };
+  const viewport = parseViewport(values.get('--viewport') ?? '1280x720');
+
+  return { port, wait, out, viewport };
 }
 
 /** 啟動 vite dev server（子程序），stdout 出現 "Local:"（server ready）才 resolve，逾時或提早結束則 reject */
@@ -116,7 +134,7 @@ function killProcessTree(child) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const { port, wait, out } = parseArgs(argv);
+  const { port, wait, out, viewport } = parseArgs(argv);
   const outPath = resolve(projectRoot, out);
   mkdirSync(dirname(outPath), { recursive: true });
 
@@ -126,7 +144,7 @@ export async function main(argv = process.argv.slice(2)) {
     viteProcess = await startViteServer(port);
 
     browser = await chromium.launch();
-    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    const page = await browser.newPage({ viewport });
 
     // 頁面錯誤偵測：截圖成功不代表畫面正常（Phaser 炸掉也可能停在黑畫面），
     // 收集 pageerror 與 console error，截圖前一併對照 canvas 是否存在。
@@ -153,7 +171,7 @@ export async function main(argv = process.argv.slice(2)) {
 
     // 即使頁面異常仍嘗試截圖：異常畫面本身就是除錯用的證據
     await page.screenshot({ path: outPath });
-    console.log(`screenshot: 已截圖至 ${outPath}`);
+    console.log(`screenshot: 已截圖至 ${outPath}（視窗 ${viewport.width}x${viewport.height}）`);
   } finally {
     // 先關 vite子程序、再關 browser：兩步各自 try/catch，一方失敗不阻斷另一方
     // （沒有這層隔離，browser.close() 拋錯會讓 vite 永遠沒被關掉、留下殭屍程序）。

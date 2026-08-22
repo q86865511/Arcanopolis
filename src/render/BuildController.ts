@@ -147,9 +147,17 @@ export class BuildController {
   }
 
   /** 游標是否壓在上/下 HUD 資訊列：pointer.x/y 是畫面座標（HUD 用 setScrollFactor(0) 固定於畫面），
-   *  不受攝影機平移縮放影響，不必經 positionToCamera 換算。 */
+   *  不受攝影機平移縮放影響，不必經 positionToCamera 換算。
+   *
+   *  視窗高度不足以同時容納上下兩列時（<= 兩列高度總和）退化為不擋：否則兩個判定式會覆蓋
+   *  整個畫面，所有放置/拆除點擊都被吞掉，玩家會以為遊戲當掉（見 M3.5 審查 F4，
+   *  實測 700x50 即觸發——舊 Scale.NONE 固定 540 高不可能出現，改 RESIZE 後才可達）。
+   *  寧可極矮視窗下誤觸世界格子，也不要讓玩家完全點不動。 */
   private isOverHud(pointer: Phaser.Input.Pointer): boolean {
     const height = this.scene.scale.height;
+    if (height <= TOP_BAR_H + BOTTOM_BAR_H) {
+      return false;
+    }
     return pointer.y < TOP_BAR_H || pointer.y > height - BOTTOM_BAR_H;
   }
 

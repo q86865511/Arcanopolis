@@ -11,8 +11,10 @@
         background: #000;
         overflow: hidden;
       }
-      /* 置中交給 Phaser 的 autoCenter（game.ts），這裡再置中會兩者相加、位移加倍 */
+      /* Phaser 的 Scale.RESIZE 會把畫布撐成 parent 的尺寸（game.ts），
+         所以 #app 必須自己填滿視窗，否則畫布也只會有 parent 那麼大 */
       #app {
+        width: 100%;
         height: 100%;
       }
       #app canvas {

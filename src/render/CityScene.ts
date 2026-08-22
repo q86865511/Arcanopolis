@@ -5,6 +5,7 @@ import Phaser from 'phaser';
 import { buildingTextureKey, villagerTextureKey } from './assets';
 import { BuildController } from './BuildController';
 import { CameraController } from './CameraController';
+import { computeCameraBounds } from './cameraBounds';
 import { buildingSize } from './defs';
 import { GRID_SIZE, createDemoWorld, terrainTextureAt } from './demoWorld';
 import { Hud } from './hud';
@@ -19,6 +20,7 @@ import {
   buildingDepth,
   terrainAnchor,
 } from './placement';
+import { footprintTiles } from '../core/world/occupancy';
 import type { Simulation } from '../core/sim/simulation';
 import type { Building, Citizen, GameState } from '../core/world/state';
 
@@ -73,9 +75,18 @@ export class CityScene extends Phaser.Scene {
   private uiCamera!: Phaser.Cameras.Scene2D.Camera;
   private readonly buildingSprites = new Map<string, Phaser.GameObjects.Image>();
   private readonly citizenSprites = new Map<string, Phaser.GameObjects.Image>();
+  /** 目前 state 中所有建築的 id：syncBuildings 用它偵測「這 tick 有沒有增減建築」。
+   *  不能拿 buildingSprites 當這份清單——缺素材的建築沒有 sprite，卻仍佔格。 */
+  private readonly knownBuildingIds = new Set<string>();
+  /** 所有建築 footprint 的格集合（key `${x},${y}`），只在建築增減時重建。
+   *  用途見 positionCitizenSprite：踩在建築格上的居民＝已進到建築裡，該隱藏。 */
+  private readonly buildingTiles = new Set<string>();
   /** 已警告過素材缺漏的 texture key（建築 type 或居民 texture key）：
-   *  缺素材的建築/居民每 tick 都會重試建 sprite，警告只出一次 */
+   *  缺素材的居民每 tick 都會重試建 sprite（警告只出一次）；缺素材的建築因 knownBuildingIds
+   *  只嘗試一次就永久放棄——見 syncBuildings 註解，日後動態載素材時不會補畫。 */
   private readonly warnedMissingTextures = new Set<string>();
+  /** 世界包圍盒（地圖 + 邊距，世界座標）。固定值，只在 create 算一次。 */
+  private worldBounds = { x: 0, y: 0, w: 0, h: 0 };
   private accumulator = 0;
 
   constructor() {
@@ -89,6 +100,8 @@ export class CityScene extends Phaser.Scene {
     this.accumulator = 0;
     this.buildingSprites.clear();
     this.citizenSprites.clear();
+    this.knownBuildingIds.clear();
+    this.buildingTiles.clear();
 
     // UI 攝影機要先建立：之後每個「世界」物件建立時都得叫它忽略，否則會被畫第二次
     this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height);
@@ -101,18 +114,20 @@ export class CityScene extends Phaser.Scene {
     this.camera = new CameraController(this);
     this.camera.attach();
 
-    // 攝影機邊界＝地圖世界包圍盒外加一圈邊距（上方多留建築高度的頭部空間）
+    // 世界包圍盒＝地圖外加一圈邊距（上方多留建築高度的頭部空間）。
+    // 這是「世界有多大」，與視窗無關；攝影機實際 bounds 由 applyCameraBounds 依視窗再算。
     const margin = TILE_W * 2;
     const left = gridToScreen(0, GRID_SIZE - 1).x - TILE_W / 2;
     const right = gridToScreen(GRID_SIZE - 1, 0).x + TILE_W / 2;
     const top = gridToScreen(0, 0).y;
     const bottom = gridToScreen(GRID_SIZE - 1, GRID_SIZE - 1).y + TILE_H;
-    this.camera.setWorldBounds(
-      left - margin,
-      top - margin - TILE_H * 3,
-      right - left + margin * 2,
-      bottom - top + margin * 2 + TILE_H * 3,
-    );
+    this.worldBounds = {
+      x: left - margin,
+      y: top - margin - TILE_H * 3,
+      w: right - left + margin * 2,
+      h: bottom - top + margin * 2 + TILE_H * 3,
+    };
+    this.applyCameraBounds();
 
     // 開場把地圖中心對準畫面中央：地圖中心即中央那格的菱形中心
     const mid = (GRID_SIZE - 1) / 2;
@@ -126,9 +141,66 @@ export class CityScene extends Phaser.Scene {
     this.build = new BuildController(this, this.state, this.sim, (def) => this.hud.setSelection(def));
     this.build.attach();
     this.uiCamera.ignore(this.build.displayObjects);
+
+    // 視窗大小會變（Scale.RESIZE）：監聽要在場景關閉時解掉，否則場景重啟會疊上第二個
+    // 監聽器，而舊監聽器持有的是已被銷毀的 hud/uiCamera。
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
+    });
+  }
+
+  /**
+   * 視窗尺寸變更：Scale.RESIZE 下畫布恆等於 parent 尺寸，但攝影機 viewport 與 HUD 版面
+   * 都停在建立當下的尺寸，不同步就會出現「HUD 被裁掉一半、畫面右下角空白」。
+   * 世界大小本身不變（applyCameraBounds 只是依新視窗重算可捲動範圍）；視窗大於世界時
+   * 世界四周留 BACKGROUND_COLOR 的底色（見 game.ts），地圖不會被推出畫面。
+   */
+  private handleResize(gameSize: Phaser.Structs.Size): void {
+    const width = Math.floor(gameSize.width);
+    const height = Math.floor(gameSize.height);
+    // 視窗最小化時 parent 尺寸會量到 0：套下去會讓攝影機 viewport 歸零而整片黑，直接忽略
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+    this.cameras.main.setSize(width, height);
+    this.uiCamera.setSize(width, height);
+    this.hud.layout(width, height);
+    this.applyCameraBounds();
+  }
+
+  /**
+   * 依「世界包圍盒」與「當前可視範圍」算出攝影機 bounds（取大＋置中，逐軸判定，
+   * 算式見 cameraBounds.ts）。可視範圍會隨視窗尺寸與滾輪縮放變動，故 resize 與每幀都呼叫；
+   * 目標值與攝影機當前 bounds 相同即早退，避免每幀打髒攝影機。
+   *
+   * 為什麼跟攝影機自身的 getBounds() 比對，而不是快取一份簽章實例欄位：
+   * scene.restart() 會銷毀舊 camera、造一台全新的（useBounds=false），若拿實例欄位當簽章，
+   * 新 camera 面對「世界大小與 zoom 都沒變」的情況會誤判成「已經設過」而早退，
+   * 新 camera 就永遠沒被 setBounds（見 M3.5 審查 F1，實測 restart 後拖曳完全未被 clamp）。
+   * 讀 camera 自身狀態比對，這類殘留狀態從結構上就不存在——新 camera 的 getBounds()
+   * 預設是 (0,0,0,0) 且 useBounds=false，必定與算出來的目標值不同，一定會被重新 setBounds。
+   */
+  private applyCameraBounds(): void {
+    const camera = this.cameras.main;
+    const target = computeCameraBounds(this.worldBounds, camera.displayWidth, camera.displayHeight);
+    const current = camera.getBounds();
+    if (
+      camera.useBounds &&
+      current.x === target.x &&
+      current.y === target.y &&
+      current.width === target.w &&
+      current.height === target.h
+    ) {
+      return;
+    }
+    this.camera.setWorldBounds(target.x, target.y, target.w, target.h);
   }
 
   update(_time: number, deltaMs: number): void {
+    // 滾輪縮放會改變可視範圍，而 CameraController 不知道世界邊界；每幀對一次簽章即可
+    this.applyCameraBounds();
+
     let ticks = 0;
     this.accumulator += deltaMs;
     while (this.accumulator >= SIM_TICK_MS && ticks < MAX_TICKS_PER_FRAME) {
@@ -179,19 +251,44 @@ export class CityScene extends Phaser.Scene {
    */
   private syncBuildings(): void {
     const alive = new Set<string>();
+    let changed = false;
     for (const building of this.state.buildings) {
       alive.add(building.id);
-      if (!this.buildingSprites.has(building.id)) {
-        const sprite = this.createBuildingSprite(building);
-        if (sprite !== null) {
-          this.buildingSprites.set(building.id, sprite);
-        }
+      if (this.knownBuildingIds.has(building.id)) {
+        continue;
+      }
+      this.knownBuildingIds.add(building.id);
+      changed = true;
+      const sprite = this.createBuildingSprite(building);
+      if (sprite !== null) {
+        this.buildingSprites.set(building.id, sprite);
       }
     }
-    for (const [id, sprite] of this.buildingSprites) {
-      if (!alive.has(id)) {
+    for (const id of this.knownBuildingIds) {
+      if (alive.has(id)) {
+        continue;
+      }
+      this.knownBuildingIds.delete(id);
+      changed = true;
+      const sprite = this.buildingSprites.get(id);
+      if (sprite !== undefined) {
         sprite.destroy();
         this.buildingSprites.delete(id);
+      }
+    }
+    // 佔格表只在建築增減時重建：建築不會移動，每 tick 重掃全城 footprint 純屬浪費
+    if (changed) {
+      this.rebuildBuildingTiles();
+    }
+  }
+
+  /** 重建 buildingTiles：全城建築的 footprint 攤平成格集合。 */
+  private rebuildBuildingTiles(): void {
+    this.buildingTiles.clear();
+    for (const building of this.state.buildings) {
+      const size = buildingSize(building.type);
+      for (const tile of footprintTiles(building.x, building.y, size.w, size.h)) {
+        this.buildingTiles.add(`${tile.x},${tile.y}`);
       }
     }
   }
@@ -262,8 +359,18 @@ export class CityScene extends Phaser.Scene {
   /**
    * 位置＝格心（浮點座標直接代入 tileCenter）疊加個體視覺偏移（見 citizenOffset），
    * depth 壓在同格建築之上、下一列地物之下即可。
+   *
+   * 可見性：所在格（四捨五入到最近格）落在任一建築 footprint 內 → 視為「進到建築裡」而隱藏。
+   * movement system 把所有建築格都當阻擋、只對居民自己的目標建築開放（見 movement.ts 檔頭），
+   * 所以居民能站上的建築格只可能是他的 home/job——踩到就是抵達目的地，不會誤隱藏路過的人。
+   * 沒有這層隱藏，居民會直接疊在建築 sprite 上，看起來像站在屋頂。
    */
   private positionCitizenSprite(sprite: Phaser.GameObjects.Image, citizen: Citizen): void {
+    const inside = this.buildingTiles.has(`${Math.round(citizen.x)},${Math.round(citizen.y)}`);
+    sprite.setVisible(!inside);
+    if (inside) {
+      return;
+    }
     const center = tileCenter(citizen.x, citizen.y);
     const offset = citizenOffset(citizen.id);
     sprite.setPosition(center.x + offset.dx, center.y + CITIZEN_Y_OFFSET + offset.dy);

@@ -7,6 +7,7 @@
 
 import Phaser from 'phaser';
 import { BUILDING_DEFS, RESOURCE_DEFS, resourceName } from './defs';
+import { computeBarsLayout, fitFontSize } from './hudLayout';
 import { getResource, type GameState } from '../core/world/state';
 import type { BuildingDef } from '../data/types';
 
@@ -21,6 +22,16 @@ export const TOP_BAR_H = 28;
 export const BOTTOM_BAR_H = 26;
 const TEXT_COLOR = '#f2efe6';
 
+/** 文字距畫面左緣的內距，與上/下列內文字的垂直內距。 */
+const TEXT_PAD_X = 10;
+const TOP_TEXT_PAD_Y = 6;
+const BOTTOM_TEXT_PAD_Y = 5;
+
+/** 兩列文字的基準字級（正常寬度視窗）與縮到不能再縮的下限（見 F3：窄視窗要縮字級才不溢出）。 */
+const RESOURCE_FONT_SIZE = 15;
+const SELECTION_FONT_SIZE = 14;
+const MIN_FONT_SIZE = 8;
+
 /** 可用數字鍵選擇的建築數量上限（與 BuildController 的按鍵表一致）。 */
 const SELECTABLE_MAX = 9;
 
@@ -31,8 +42,11 @@ function selectHint(): string {
 
 export class Hud {
   private readonly objects: Phaser.GameObjects.GameObject[] = [];
+  private bars!: Phaser.GameObjects.Graphics;
   private resourceText!: Phaser.GameObjects.Text;
   private selectionText!: Phaser.GameObjects.Text;
+  /** 最近一次 layout() 的視窗寬度：refresh()/setSelection() 換了文字內容後要用同一個寬度重算字級。 */
+  private lastWidth = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -40,16 +54,10 @@ export class Hud {
   ) {}
 
   create(): void {
-    const width = this.scene.scale.width;
-    const height = this.scene.scale.height;
+    this.bars = this.scene.add.graphics();
+    this.register(this.bars);
 
-    const bars = this.scene.add.graphics();
-    bars.fillStyle(BAR_COLOR, BAR_ALPHA);
-    bars.fillRect(0, 0, width, TOP_BAR_H);
-    bars.fillRect(0, height - BOTTOM_BAR_H, width, BOTTOM_BAR_H);
-    this.register(bars);
-
-    this.resourceText = this.scene.add.text(10, 6, this.formatResources(), {
+    this.resourceText = this.scene.add.text(TEXT_PAD_X, TOP_TEXT_PAD_Y, this.formatResources(), {
       // 系統 monospace：數字等寬，數值跳動時欄位不會左右抖動
       fontFamily: 'monospace',
       fontSize: '15px',
@@ -59,7 +67,7 @@ export class Hud {
     });
     this.register(this.resourceText);
 
-    this.selectionText = this.scene.add.text(10, height - BOTTOM_BAR_H + 5, selectHint(), {
+    this.selectionText = this.scene.add.text(TEXT_PAD_X, 0, selectHint(), {
       fontFamily: 'monospace',
       fontSize: '14px',
       color: TEXT_COLOR,
@@ -67,6 +75,42 @@ export class Hud {
       strokeThickness: 3,
     });
     this.register(this.selectionText);
+
+    this.layout(this.scene.scale.width, this.scene.scale.height);
+  }
+
+  /**
+   * 依「當前視窗尺寸」重排：上列貼頂、下列貼底、兩列都延展成整個視窗寬。
+   * 建立時與每次視窗尺寸變更（CityScene 的 resize 監聽）都要呼叫——資訊列是 Graphics 畫出來的
+   * 矩形，不會自己跟著視窗長；下列的 y 也是算出來的絕對值，不重排就會停在舊高度的位置。
+   *
+   * 同時依可用寬度縮字級（見 fitTextToWidth）：窄視窗下文字實寬會超過畫面，
+   * 溢出的字疊到世界區、資源數字讀不完整（見 M3.5 審查 F3，實測 320 寬時溢出 467px）。
+   */
+  layout(width: number, height: number): void {
+    this.lastWidth = width;
+    const barsLayout = computeBarsLayout(height, TOP_BAR_H, BOTTOM_BAR_H, BOTTOM_TEXT_PAD_Y);
+
+    this.bars.clear();
+    this.bars.fillStyle(BAR_COLOR, BAR_ALPHA);
+    this.bars.fillRect(0, barsLayout.topBar.y, width, barsLayout.topBar.height);
+    this.bars.fillRect(0, barsLayout.bottomBar.y, width, barsLayout.bottomBar.height);
+
+    this.resourceText.setPosition(TEXT_PAD_X, TOP_TEXT_PAD_Y);
+    this.selectionText.setPosition(TEXT_PAD_X, barsLayout.bottomTextY);
+
+    this.fitTextToWidth();
+  }
+
+  /** 依 lastWidth 與目前文字內容長度重算兩列字級；文字內容變了（refresh/setSelection）也要重算。 */
+  private fitTextToWidth(): void {
+    const available = Math.max(0, this.lastWidth - TEXT_PAD_X * 2);
+    this.resourceText.setFontSize(
+      fitFontSize(this.resourceText.text.length, available, RESOURCE_FONT_SIZE, MIN_FONT_SIZE),
+    );
+    this.selectionText.setFontSize(
+      fitFontSize(this.selectionText.text.length, available, SELECTION_FONT_SIZE, MIN_FONT_SIZE),
+    );
   }
 
   /** 給 CityScene 用：主攝影機要忽略這些物件，否則 HUD 會被畫兩次（一次還帶著世界的縮放）。 */
@@ -77,10 +121,12 @@ export class Hud {
   /** 每次 sim tick 之後呼叫，把資源數值同步成最新值。 */
   refresh(): void {
     this.resourceText.setText(this.formatResources());
+    this.fitTextToWidth();
   }
 
   setSelection(def: BuildingDef | null): void {
     this.selectionText.setText(def === null ? selectHint() : this.formatSelection(def));
+    this.fitTextToWidth();
   }
 
   private register(object: Phaser.GameObjects.Graphics | Phaser.GameObjects.Text): void {
