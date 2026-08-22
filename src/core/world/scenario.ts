@@ -5,14 +5,14 @@
 import { addResource, type GameState } from './state';
 
 /**
- * 開局資源：夠蓋十來棟起步建築、又不足以無腦鋪滿全圖——
- * 這樣「資源不足」的紅色預覽在試玩前幾分鐘內就看得到，是刻意的。
+ * 開局資源：十種建築各蓋一棟的金幣成本合計 135；M4-W2 稅收／市場尚未提供金幣來源前，
+ * 先給 150 以涵蓋完整加工鏈並保留 15 金幣起步緩衝，其餘資源仍限制玩家無法無腦鋪滿全圖。
  */
 export const STARTING_RESOURCES: Readonly<Record<string, number>> = {
   wood: 500,
   stone: 200,
   food: 100,
-  gold: 100,
+  gold: 150,
 };
 
 /**

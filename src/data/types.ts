@@ -16,6 +16,8 @@ export interface BuildingDef {
   cost: Record<string, number>;
   /** 每 tick 產量：資源 id → 數量；無生產則為空物件 */
   production: Record<string, number>;
+  /** 每 tick 滿載生產所需原料：資源 id → 正數數量；省略代表不需原料 */
+  inputs?: Record<string, number>;
   /** 可容納居民數；資料表省略時由 loader 正規化為 0 */
   housing: number;
   /** 可提供工作數；資料表省略時由 loader 正規化為 0 */

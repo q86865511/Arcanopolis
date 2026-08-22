@@ -27,13 +27,21 @@ const POPULATION_CONFIG = parsePopulationConfig(populationJson);
 const STARTING_BUILDINGS: ReadonlyArray<readonly [string, number, number]> = [
   ['house', 0, 2],
   ['house', 3, 2],
-  ['farm', 1, 4],
+  // 食物鏈依序放在伐木場之前：既有 jobs system 距離相同時按陣列序指派，六名居民會先填滿三段鏈。
+  ['farm', 0, 4],
+  ['mill', 2, 4],
+  ['bakery', 4, 4],
   ['lumber-camp', 2, 0],
 ];
 
+// 農場、磨坊、麵包坊各需 2 名工人；6 人是三段食物鏈能同時滿編運轉的最低人口。
 const STARTING_CITIZENS: ReadonlyArray<readonly [string, number]> = [
   ['citizen#0-0', 0],
-  ['citizen#0-1', 1],
+  ['citizen#0-1', 0],
+  ['citizen#0-2', 0],
+  ['citizen#0-3', 0],
+  ['citizen#0-4', 1],
+  ['citizen#0-5', 1],
 ];
 
 /**

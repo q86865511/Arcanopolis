@@ -2,5 +2,11 @@
   { "id": "wood", "name": "木材" },
   { "id": "stone", "name": "石材" },
   { "id": "food", "name": "糧食" },
-  { "id": "gold", "name": "金幣" }
+  { "id": "gold", "name": "金幣" },
+  { "id": "grain", "name": "穀物" },
+  { "id": "flour", "name": "麵粉" },
+  { "id": "plank", "name": "木板" },
+  { "id": "iron-ore", "name": "鐵礦" },
+  { "id": "iron", "name": "鐵錠" },
+  { "id": "tools", "name": "工具" }
 ]

@@ -336,14 +336,14 @@ describe('runFastForward：fullSim 分支（F5，M3-W3 審查裁決）', () => {
     expect(overridden.finalState.citizens.length).not.toBe(base.finalState.citizens.length);
   });
 
-  it('(c) fullSim 下起始資源正確出現在第一列（wood500/stone200/food100/gold100，即使 buildings 為空）', () => {
+  it('(c) fullSim 下起始資源正確出現在第一列（wood500/stone200/food100/gold150，即使 buildings 為空）', () => {
     const { csv } = runFastForward({ seed: 1, ticks: 10, sampleEvery: 10, buildings: [], fullSim: true });
     const [header, firstRow] = csvLines(csv);
     const columns = header.split(',');
     const fields = firstRow.split(',');
     expect(fields[0]).toBe('0');
 
-    const expected: Record<string, number> = { wood: 500, stone: 200, food: 100, gold: 100 };
+    const expected: Record<string, number> = { wood: 500, stone: 200, food: 100, gold: 150 };
     for (const [id, amount] of Object.entries(expected)) {
       const idx = columns.indexOf(id);
       expect(idx).toBeGreaterThanOrEqual(0);

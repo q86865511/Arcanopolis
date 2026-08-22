@@ -33,12 +33,13 @@ const RESOURCE_FONT_SIZE = 15;
 const SELECTION_FONT_SIZE = 14;
 const MIN_FONT_SIZE = 8;
 
-/** 可用數字鍵選擇的建築數量上限（與 BuildController 的按鍵表一致）。 */
-const SELECTABLE_MAX = 9;
+/** 可用數字鍵選擇的建築數量上限（1..9、0，與 BuildController 的按鍵表一致）。 */
+const SELECTABLE_MAX = 10;
 
 function selectHint(): string {
   const count = Math.min(BUILDING_DEFS.length, SELECTABLE_MAX);
-  return `按 1-${count} 選擇建築　左鍵放置 / 右鍵拆除`;
+  const keys = count <= 9 ? `1-${count}` : '1-9 / 0';
+  return `按 ${keys} 選擇建築　左鍵放置 / 右鍵拆除`;
 }
 
 export class Hud {

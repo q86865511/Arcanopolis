@@ -37,7 +37,17 @@ function rejectUnknownKeys(item: Record<string, unknown>, allowedKeys: readonly 
 
 const RESOURCE_DEF_KEYS = ['id', 'name'] as const;
 const TERRAIN_DEF_KEYS = ['id', 'name', 'walkable', 'buildable'] as const;
-const BUILDING_DEF_KEYS = ['id', 'name', 'size', 'cost', 'production', 'housing', 'jobs', 'terrain'] as const;
+const BUILDING_DEF_KEYS = [
+  'id',
+  'name',
+  'size',
+  'cost',
+  'production',
+  'inputs',
+  'housing',
+  'jobs',
+  'terrain',
+] as const;
 const BUILDING_SIZE_KEYS = ['w', 'h'] as const;
 const BUILDING_TERRAIN_KEYS = ['on', 'near', 'consumes'] as const;
 const TERRAIN_ECONOMY_KEYS = ['forestWoodCapacity', 'rockStoneCapacity', 'forestRegrowDays'] as const;
@@ -93,6 +103,38 @@ function validateAmounts(
   }
   // 回傳複本：與輸入 JSON 斷開參照，呼叫端改動 def 不會污染原始資料表物件
   return { ...(amounts as Record<string, number>) };
+}
+
+/** 驗證 inputs：省略代表無原料需求；有值時 key 須合法、value 須為有限正數。 */
+function validateInputs(
+  inputs: unknown,
+  buildingId: string,
+  resourceIds: Set<string>,
+): Record<string, number> | undefined {
+  if (inputs === undefined) {
+    return undefined;
+  }
+  if (!isPlainObject(inputs)) {
+    throw new Error(
+      `parseBuildingDefs: 建築 "${buildingId}" 的 inputs 必須是物件，收到 ${JSON.stringify(inputs)}`,
+    );
+  }
+  for (const [resourceId, amount] of Object.entries(inputs)) {
+    if (!resourceIds.has(resourceId)) {
+      throw new Error(
+        `parseBuildingDefs: 建築 "${buildingId}" 的 inputs 引用未知資源 id，收到 "${resourceId}"`,
+      );
+    }
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+      throw new Error(
+        `parseBuildingDefs: 建築 "${buildingId}" 的 inputs.${resourceId} 必須是有限正數，收到 ${amount}`,
+      );
+    }
+  }
+  if (Object.keys(inputs).length === 0) {
+    return undefined;
+  }
+  return { ...(inputs as Record<string, number>) };
 }
 
 function validateBuildingTerrain(value: unknown, buildingId: string): BuildingDef['terrain'] {
@@ -220,7 +262,7 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素必須是物件，收到 ${JSON.stringify(item)}`);
     }
     rejectUnknownKeys(item, BUILDING_DEF_KEYS, `parseBuildingDefs: 第 ${index} 個元素`);
-    const { id, name, size, cost, production, housing, jobs, terrain } = item;
+    const { id, name, size, cost, production, inputs, housing, jobs, terrain } = item;
 
     if (!isNonEmptyString(id)) {
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素的 id 必須是非空字串，收到 ${JSON.stringify(id)}`);
@@ -239,6 +281,7 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
     }
     const validCost = validateAmounts(cost, 'cost', id, resourceIds);
     const validProduction = validateAmounts(production, 'production', id, resourceIds);
+    const validInputs = validateInputs(inputs, id, resourceIds);
     const validHousing = validateCapacity(housing, 'housing', id);
     const validJobs = validateCapacity(jobs, 'jobs', id);
     const validTerrain = validateBuildingTerrain(terrain, id);
@@ -254,6 +297,7 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       size: { w: size.w, h: size.h },
       cost: validCost,
       production: validProduction,
+      ...(validInputs === undefined ? {} : { inputs: validInputs }),
       housing: validHousing,
       jobs: validJobs,
       ...(validTerrain === undefined ? {} : { terrain: validTerrain }),

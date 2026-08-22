@@ -25,8 +25,19 @@ const PREVIEW_BLOCKED_COLOR = 0xd95763;
 const PREVIEW_FILL_ALPHA = 0.35;
 const PREVIEW_LINE_ALPHA = 0.9;
 
-/** 數字鍵 1..9 對應 BUILDING_DEFS 的前 9 項（依資料表順序，新增建築不必改程式）。 */
-const SELECT_KEY_NAMES = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'];
+/** 數字鍵 1..9、0 對應 BUILDING_DEFS 的前 10 項（依資料表順序）。 */
+const SELECT_KEY_NAMES = [
+  'ONE',
+  'TWO',
+  'THREE',
+  'FOUR',
+  'FIVE',
+  'SIX',
+  'SEVEN',
+  'EIGHT',
+  'NINE',
+  'ZERO',
+];
 
 const MOUSE_BUTTON_LEFT = 0;
 const MOUSE_BUTTON_RIGHT = 2;

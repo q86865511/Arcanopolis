@@ -443,7 +443,7 @@ describe('真實 buildings.json + terrain-economy.json 生產行為', () => {
     system.update(state, { rng: createRng(1), time: timeFromTick(tick) });
   }
 
-  it('farm 蓋在天然草地且滿在職率時每 tick 產 3 糧，不消耗任何地形', () => {
+  it('farm 蓋在天然草地且滿在職率時每 tick 產 4 grain，不消耗任何地形', () => {
     const farm = realDefs.find((def) => def.id === 'farm')!;
     const coord = naturalTerrain('grass');
     const state = createInitialState(SEED);
@@ -454,9 +454,9 @@ describe('真實 buildings.json + terrain-economy.json 生產行為', () => {
     const beforeOverrides = JSON.stringify(state.terrainOverrides);
 
     update(system, state, 1);
-    expect(getResource(state, 'food')).toBe(3);
+    expect(getResource(state, 'grain')).toBe(4);
     update(system, state, 2);
-    expect(getResource(state, 'food')).toBe(6);
+    expect(getResource(state, 'grain')).toBe(8);
     expect(JSON.stringify(state.terrainOverrides)).toBe(beforeOverrides);
     expect(terrainAt(state, coord.x, coord.y)).toBe('grass');
   });

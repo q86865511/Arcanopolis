@@ -214,13 +214,38 @@ const defaultPopulationConfig = parsePopulationConfig(populationJson);
 
 function prioritizeFullSimEmployment(buildings: Building[]): Building[] {
   const inputOrder = new Map(buildings.map((building, index) => [building.id, index]));
-  const foodProduction = new Map(
-    buildingDefs.map((definition) => [definition.id, definition.production.food ?? 0]),
+  // 從最終 food 反向追蹤 inputs，算出各資源距離 food 的鏈路深度；深度越大代表越上游。
+  // full-sim 人力不足時依上游→下游排序，確保先有 grain、再有 flour，最後 bakery 才能產 food。
+  const distanceToFood = new Map<string, number>([['food', 0]]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const definition of buildingDefs) {
+      const outputDistances = Object.keys(definition.production)
+        .map((resourceId) => distanceToFood.get(resourceId))
+        .filter((distance): distance is number => distance !== undefined);
+      if (outputDistances.length === 0) continue;
+      const inputDistance = Math.min(...outputDistances) + 1;
+      for (const resourceId of Object.keys(definition.inputs ?? {})) {
+        const current = distanceToFood.get(resourceId);
+        if (current !== undefined && current <= inputDistance) continue;
+        distanceToFood.set(resourceId, inputDistance);
+        changed = true;
+      }
+    }
+  }
+  const foodChainDepth = new Map(
+    buildingDefs.map((definition) => {
+      const distances = Object.keys(definition.production)
+        .map((resourceId) => distanceToFood.get(resourceId))
+        .filter((distance): distance is number => distance !== undefined);
+      return [definition.id, distances.length === 0 ? -1 : Math.min(...distances)] as const;
+    }),
   );
   return [...buildings].sort((left, right) => {
-    const foodDifference = (foodProduction.get(right.type) ?? 0) - (foodProduction.get(left.type) ?? 0);
-    return foodDifference !== 0
-      ? foodDifference
+    const depthDifference = (foodChainDepth.get(right.type) ?? -1) - (foodChainDepth.get(left.type) ?? -1);
+    return depthDifference !== 0
+      ? depthDifference
       : inputOrder.get(left.id)! - inputOrder.get(right.id)!;
   });
 }

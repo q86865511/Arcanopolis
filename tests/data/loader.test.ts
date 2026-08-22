@@ -147,7 +147,7 @@ describe('實際資料表 data/resources.json、data/buildings.json（R3）', ()
     expect(ids).toEqual(expect.arrayContaining(['lumber-camp', 'quarry', 'farm', 'house']));
   });
 
-  it('lumber-camp 產 wood、quarry 產 stone、farm 產 food', () => {
+  it('lumber-camp 產 wood、quarry 產 stone、farm 產 grain', () => {
     const resources = parseResourceDefs(resourcesJson);
     const resourceIds = new Set(resources.map((r) => r.id));
     const buildings = parseBuildingDefs(buildingsJson, resourceIds);
@@ -155,7 +155,7 @@ describe('實際資料表 data/resources.json、data/buildings.json（R3）', ()
 
     expect(byId.get('lumber-camp')?.production.wood).toBeGreaterThan(0);
     expect(byId.get('quarry')?.production.stone).toBeGreaterThan(0);
-    expect(byId.get('farm')?.production.food).toBeGreaterThan(0);
+    expect(byId.get('farm')?.production.grain).toBe(4);
   });
 
   it('house 無 production、有 cost', () => {
