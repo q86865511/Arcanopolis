@@ -11,7 +11,11 @@ export function createJobsSystem(defs: BuildingDef[]): System {
   return {
     id: 'jobs',
     update(state: GameState, _ctx: SimContext): void {
-      const buildingsById = new Map(state.buildings.map((b) => [b.id, b]));
+      // 重複 building id 一律保留陣列中第一筆，與 movement 的導航目標解析一致。
+      const buildingsById = new Map<string, (typeof state.buildings)[number]>();
+      for (const building of state.buildings) {
+        if (!buildingsById.has(building.id)) buildingsById.set(building.id, building);
+      }
 
       // home 指向不存在的建築 → citizen 整個移除
       state.citizens = state.citizens.filter((c) => buildingsById.has(c.home));
@@ -40,17 +44,25 @@ export function createJobsSystem(defs: BuildingDef[]): System {
         occupancy.set(citizen.job, current + 1);
       }
 
-      // 依 citizens 陣列序指派待業者，各自依 buildings 陣列序找第一個有空缺的建築
+      // 依 citizens 陣列序指派待業者；選離 home 最近的空缺，距離相同時保留 buildings 陣列序。
       for (const citizen of state.citizens) {
         if (citizen.job !== null) continue;
-        for (const building of state.buildings) {
+        const home = buildingsById.get(citizen.home)!;
+        let nearestBuildingId: string | null = null;
+        let nearestDistance = Infinity;
+        for (const building of buildingsById.values()) {
           const capacity = defsByType.get(building.type)?.jobs ?? 0;
           const current = occupancy.get(building.id) ?? 0;
-          if (current < capacity) {
-            citizen.job = building.id;
-            occupancy.set(building.id, current + 1);
-            break;
-          }
+          if (current >= capacity) continue;
+          // 這是直線 Manhattan 估算，不考慮障礙；實際可達性由 movement 的有界搜尋負責。
+          const distance = Math.abs(home.x - building.x) + Math.abs(home.y - building.y);
+          if (distance >= nearestDistance) continue;
+          nearestBuildingId = building.id;
+          nearestDistance = distance;
+        }
+        if (nearestBuildingId !== null) {
+          citizen.job = nearestBuildingId;
+          occupancy.set(nearestBuildingId, (occupancy.get(nearestBuildingId) ?? 0) + 1);
         }
       }
     },

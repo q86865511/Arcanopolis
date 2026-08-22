@@ -137,30 +137,54 @@ export interface DistanceField {
  *   只擋中途格）：因此 blocked 格會被賦予距離值，但不從它繼續擴散。
  * 用途：多名居民共用同一 goal 時，一次 O(w*h) 取代每人一次 O(V²) 的 A*。
  */
-export function distanceField(goal: Point, isBlocked: IsBlocked, bounds: Bounds): DistanceField {
+export function distanceField(
+  goal: Point,
+  isBlocked: IsBlocked,
+  bounds: Bounds,
+  maxNodes?: number,
+): DistanceField {
+  if (maxNodes !== undefined && (!Number.isFinite(maxNodes) || maxNodes < 1)) {
+    throw new Error(`distanceField: maxNodes 必須是大於等於 1 的有限數，收到 ${String(maxNodes)}`);
+  }
   const { w, h } = bounds;
   const empty: DistanceField = { get: () => null };
   if (!Number.isInteger(w) || !Number.isInteger(h) || w <= 0 || h <= 0) return empty;
   if (!inBounds(goal.x, goal.y, bounds)) return empty;
 
-  const dist = new Int32Array(w * h).fill(-1);
+  const totalNodes = w * h;
+  const nodeLimit = maxNodes === undefined ? totalNodes : Math.min(totalNodes, Math.floor(maxNodes));
+  const dense = nodeLimit === totalNodes ? new Int32Array(totalNodes).fill(-1) : null;
+  const sparse = dense === null ? new Map<number, number>() : null;
+  const getDistance = (index: number): number | undefined => {
+    if (dense === null) return sparse!.get(index);
+    const value = dense[index];
+    return value >= 0 ? value : undefined;
+  };
+  const setDistance = (index: number, value: number): void => {
+    if (dense === null) sparse!.set(index, value);
+    else dense[index] = value;
+  };
+
   const queue: number[] = [];
   const goalIndex = goal.y * w + goal.x;
-  dist[goalIndex] = 0;
+  setDistance(goalIndex, 0);
   queue.push(goalIndex);
+  let assignedNodes = 1;
 
-  for (let head = 0; head < queue.length; head++) {
+  search: for (let head = 0; head < queue.length; head++) {
     const index = queue[head];
     const cx = index % w;
     const cy = (index - cx) / w;
-    const nextDist = dist[index] + 1;
+    const nextDist = getDistance(index)! + 1;
     for (const [dx, dy] of NEIGHBOR_OFFSETS) {
+      if (assignedNodes >= nodeLimit) break search;
       const nx = cx + dx;
       const ny = cy + dy;
       if (!inBounds(nx, ny, bounds)) continue;
       const nIndex = ny * w + nx;
-      if (dist[nIndex] >= 0) continue;
-      dist[nIndex] = nextDist;
+      if (getDistance(nIndex) !== undefined) continue;
+      setDistance(nIndex, nextDist);
+      assignedNodes++;
       // blocked 格只登記距離、不繼續擴散——它可以是起點（走出建築），但不能被穿越。
       if (!isBlocked(nx, ny)) queue.push(nIndex);
     }
@@ -169,8 +193,7 @@ export function distanceField(goal: Point, isBlocked: IsBlocked, bounds: Bounds)
   return {
     get(x: number, y: number): number | null {
       if (!Number.isInteger(x) || !Number.isInteger(y) || !inBounds(x, y, bounds)) return null;
-      const d = dist[y * w + x];
-      return d >= 0 ? d : null;
+      return getDistance(y * w + x) ?? null;
     },
   };
 }
