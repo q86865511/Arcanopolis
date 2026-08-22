@@ -10,10 +10,11 @@ import { createJobsSystem } from '../core/systems/jobs';
 import { createMovementSystem } from '../core/systems/movement';
 import { createPopulationSystem } from '../core/systems/population';
 import { createProductionSystem } from '../core/systems/production';
+import { createRegrowthSystem } from '../core/systems/regrowth';
 import { applyStartingResources } from '../core/world/scenario';
 import { createInitialState, type Building, type Citizen, type GameState } from '../core/world/state';
 import { TERRAIN_TEXTURES } from './assets';
-import { BUILDING_DEFS, RESOURCE_DEFS } from './defs';
+import { BUILDING_DEFS, RESOURCE_DEFS, TERRAIN_ECONOMY } from './defs';
 
 /** demo 地圖邊長（格）。 */
 export const GRID_SIZE = 12;
@@ -53,8 +54,40 @@ const STARTING_CITIZENS: ReadonlyArray<readonly [string, string, number, number]
   ['citizen#0-1', 'house@7,4#0', 7, 4],
 ];
 
+/**
+ * demo 區的地形覆寫：render 目前畫的是自己的 terrainTextureAt 圖案，core 的地形卻來自
+ * 程序生成的島嶼——demo 的 12×12 區塊落在 200×200 世界的角落，core 判定為 water，
+ * 導致伐木場找不到森林來源而永遠產出 0。W4 會讓 render 直接讀 core 地形，屆時整段刪除；
+ * 在那之前先把 demo 區覆寫成可玩的地形，讓地形綁定的產出鏈在遊戲裡真的跑得起來。
+ */
+function applyDemoTerrain(state: GameState): void {
+  for (let gy = 0; gy < GRID_SIZE; gy++) {
+    for (let gx = 0; gx < GRID_SIZE; gx++) {
+      state.terrainOverrides[`${gx},${gy}`] = { type: 'grass' };
+    }
+  }
+  // 伐木場 (6,2) 的北與東鄰給森林，開局即有木材來源；耗盡後可觀察到再生
+  for (const [gx, gy] of [
+    [6, 1],
+    [7, 2],
+    [6, 0],
+    [7, 1],
+  ] as const) {
+    state.terrainOverrides[`${gx},${gy}`] = { type: 'forest' };
+  }
+  // 一小片石礦，供玩家自行蓋採石場（quarry 的 terrain.on 要求 rock）
+  for (const [gx, gy] of [
+    [9, 8],
+    [10, 8],
+    [9, 9],
+  ] as const) {
+    state.terrainOverrides[`${gx},${gy}`] = { type: 'rock' };
+  }
+}
+
 export function createDemoWorld(): DemoWorld {
   const state = createInitialState(DEMO_SEED);
+  applyDemoTerrain(state);
   applyStartingResources(state, validResourceIds);
 
   for (const [type, x, y] of STARTING_BUILDINGS) {
@@ -81,8 +114,9 @@ export function createDemoWorld(): DemoWorld {
     state,
     [
       createJobsSystem(BUILDING_DEFS),
-      createProductionSystem(BUILDING_DEFS),
+      createProductionSystem(BUILDING_DEFS, TERRAIN_ECONOMY),
       createPopulationSystem(BUILDING_DEFS, POPULATION_CONFIG),
+      createRegrowthSystem(TERRAIN_ECONOMY),
       createMovementSystem(BUILDING_DEFS, { w: GRID_SIZE, h: GRID_SIZE }),
     ],
     BUILDING_DEFS,

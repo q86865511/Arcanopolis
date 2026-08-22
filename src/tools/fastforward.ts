@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import buildingsJson from '../../data/buildings.json';
 import populationJson from '../../data/population.json';
 import resourcesJson from '../../data/resources.json';
+import terrainEconomyJson from '../../data/terrain-economy.json';
 import { Simulation } from '../core/sim/simulation';
 import type { System } from '../core/sim/system';
 import { timeFromTick } from '../core/sim/time';
@@ -11,6 +12,8 @@ import { createJobsSystem } from '../core/systems/jobs';
 import { createMovementSystem } from '../core/systems/movement';
 import { createPopulationSystem } from '../core/systems/population';
 import { createProductionSystem } from '../core/systems/production';
+import { createRegrowthSystem } from '../core/systems/regrowth';
+import { canBuildAt } from '../core/world/buildable';
 import { applyStartingResources } from '../core/world/scenario';
 import {
   createInitialState,
@@ -19,7 +22,7 @@ import {
   type GameState,
 } from '../core/world/state';
 import type { PopulationConfig } from '../data/types';
-import { parseBuildingDefs, parsePopulationConfig, parseResourceDefs } from '../data/loader';
+import { parseBuildingDefs, parsePopulationConfig, parseResourceDefs, parseTerrainEconomy } from '../data/loader';
 
 declare const process: {
   argv: string[];
@@ -53,6 +56,8 @@ export interface FastForwardOptions {
   ticks: number;
   sampleEvery: number;
   buildings: Building[];
+  /** CLI --full-sim 延後至 state 建立後才依地形展開；程式化呼叫可繼續直接傳 buildings。 */
+  buildingSpecs?: BuildingSpec[];
   fullSim?: boolean;
   grid?: number;
   populationConfig?: PopulationConfig;
@@ -66,6 +71,7 @@ export interface FastForwardResult {
 const resourceDefs = parseResourceDefs(resourcesJson);
 const resourceIds = new Set(resourceDefs.map((definition) => definition.id));
 const buildingDefs = parseBuildingDefs(buildingsJson, resourceIds);
+const terrainEconomy = parseTerrainEconomy(terrainEconomyJson);
 
 function parseInteger(parameter: string, value: string | undefined): number {
   // 嚴格十進位：拒絕 0x10、1e3、"+5"、"007"、前後空白等 Number() 過寬接受的形式
@@ -206,32 +212,58 @@ function csvRow(state: GameState): string {
 
 const defaultPopulationConfig = parsePopulationConfig(populationJson);
 
+function prioritizeFullSimEmployment(buildings: Building[]): Building[] {
+  const inputOrder = new Map(buildings.map((building, index) => [building.id, index]));
+  const foodProduction = new Map(
+    buildingDefs.map((definition) => [definition.id, definition.production.food ?? 0]),
+  );
+  return [...buildings].sort((left, right) => {
+    const foodDifference = (foodProduction.get(right.type) ?? 0) - (foodProduction.get(left.type) ?? 0);
+    return foodDifference !== 0
+      ? foodDifference
+      : inputOrder.get(left.id)! - inputOrder.get(right.id)!;
+  });
+}
+
 export function runFastForward(options: FastForwardOptions): FastForwardResult {
   validateRunOptions(options);
 
   const state = createInitialState(options.seed);
-  state.buildings = options.buildings.map((building) => ({ ...building }));
 
   let systems: System[];
+  let simulationBuildingDefs = buildingDefs;
   if (options.fullSim) {
     // 完整人口模擬情境：citizens 從 0 開始，靠 population system 逐日成長並經 jobs system
     // 指派工作；movement 需要地圖邊界（方形，邊長 --grid，預設 DEFAULT_GRID_SIZE）。
     state.citizens = [];
     applyStartingResources(state, resourceIds);
     const grid = options.grid ?? DEFAULT_GRID_SIZE;
+    state.worldSize = grid;
+    const placedBuildings = (
+      options.buildingSpecs === undefined
+        ? options.buildings
+        : expandBuildingSpecs(options.buildingSpecs, grid, state)
+    ).map((building) => ({ ...building }));
+    state.buildings = options.buildingSpecs === undefined
+      ? placedBuildings
+      : prioritizeFullSimEmployment(placedBuildings);
     const populationConfig = options.populationConfig ?? defaultPopulationConfig;
     systems = [
       createJobsSystem(buildingDefs),
-      createProductionSystem(buildingDefs),
+      createProductionSystem(buildingDefs, terrainEconomy),
       createPopulationSystem(buildingDefs, populationConfig),
+      createRegrowthSystem(terrainEconomy),
       createMovementSystem(buildingDefs, { w: grid, h: grid }),
     ];
   } else {
-    // 滿編就業情境：M3 起產出按在職率計算，快轉工具給每棟建築直接配滿工人，
-    // 曲線代表「理想產能」；真實人口成長曲線由 --full-sim 情境另跑（T5）。
+    // 非 fullSim 是「理想產能」情境：既然會憑空滿編且不模擬人口，同一抽象層級也刻意
+    // 剝除地形限制，用來回答建築組合的理論最大產出曲線；真實人口與地形耗竭由 --full-sim 模擬。
+    // 若變更此行為，請一併更新 CLAUDE.md 的 simulate 指令說明。
+    state.buildings = options.buildings.map((building) => ({ ...building }));
+    simulationBuildingDefs = buildingDefs.map(({ terrain: _terrain, ...definition }) => definition);
     // home 借用工作建築本身——僅為滿足存檔引用存在性，快轉情境不模擬住房。
     state.citizens = state.buildings.flatMap((building) => {
-      const def = buildingDefs.find((d) => d.id === building.type);
+      const def = simulationBuildingDefs.find((d) => d.id === building.type);
       return Array.from({ length: def?.jobs ?? 0 }, (_, i) => ({
         id: `${building.id}-worker-${i}`,
         home: building.id,
@@ -240,10 +272,10 @@ export function runFastForward(options: FastForwardOptions): FastForwardResult {
         y: building.y,
       }));
     });
-    systems = [createProductionSystem(buildingDefs)];
+    systems = [createProductionSystem(simulationBuildingDefs, terrainEconomy)];
   }
 
-  const simulation = new Simulation(state, systems, buildingDefs);
+  const simulation = new Simulation(state, systems, simulationBuildingDefs);
   const rows = [
     ['tick', 'totalDay', 'population', ...resourceDefs.map((definition) => definition.id)].join(','),
     csvRow(state),
@@ -263,15 +295,25 @@ export function runFastForward(options: FastForwardOptions): FastForwardResult {
 
 /**
  * 把 --buildings 的 type:count 規格展開成 Building 實體；未知 type 在跑模擬前就擋下。
- * 佈局依 grid 換行（x=i%grid、y=floor(i/grid)）而非排成單一長列——--full-sim 的 movement
- * bounds 是 grid×grid，排成一列會讓超出 grid 棟數之後的建築落在界外，被指派過去的居民永遠
- * 走不到（見 M3-W3 審查 F4）。棟數超出 grid*grid 容量時直接 throw，不要靜默生出界外建築。
+ * 未傳 state 時維持理想產能模式的簡單 row-major 排列。傳入 state（僅 --full-sim）時，
+ * 從世界中心依 Chebyshev 環由內而外掃描，每環內採 row-major，並以 canBuildAt 驗證地形與佔格。
  */
-export function expandBuildingSpecs(specs: BuildingSpec[], grid: number = DEFAULT_GRID_SIZE): Building[] {
+export function expandBuildingSpecs(
+  specs: BuildingSpec[],
+  grid: number = DEFAULT_GRID_SIZE,
+  state?: GameState,
+): Building[] {
   const capacity = grid * grid;
   const buildings: Building[] = [];
+  const placementState = state === undefined
+    ? undefined
+    : { ...state, buildings: state.buildings.map((building) => ({ ...building })) };
+  const center = Math.floor(grid / 2);
+  const maxRadius = Math.max(center, grid - 1 - center);
+
   for (const spec of specs) {
-    if (!buildingDefs.some((def) => def.id === spec.type)) {
+    const def = buildingDefs.find((definition) => definition.id === spec.type);
+    if (def === undefined) {
       throw new Error(
         `expandBuildingSpecs: 未知建築 type "${spec.type}"（可用：${buildingDefs.map((d) => d.id).join(', ')}）`,
       );
@@ -283,12 +325,39 @@ export function expandBuildingSpecs(specs: BuildingSpec[], grid: number = DEFAUL
           `expandBuildingSpecs: 建築總數超出 grid=${grid} 容量（${capacity}），第 ${index + 1} 棟已超額`,
         );
       }
-      buildings.push({
+      const building: Building = {
         id: `${spec.type}-${index}`,
         type: spec.type,
         x: index % grid,
         y: Math.floor(index / grid),
-      });
+      };
+
+      if (placementState !== undefined) {
+        let found = false;
+        for (let radius = 0; radius <= maxRadius && !found; radius++) {
+          const minX = Math.max(0, center - radius);
+          const maxX = Math.min(grid - 1, center + radius);
+          const minY = Math.max(0, center - radius);
+          const maxY = Math.min(grid - 1, center + radius);
+          for (let y = minY; y <= maxY && !found; y++) {
+            for (let x = minX; x <= maxX; x++) {
+              if (Math.max(Math.abs(x - center), Math.abs(y - center)) !== radius) continue;
+              if (!canBuildAt(placementState, def, x, y, buildingDefs)) continue;
+              building.x = x;
+              building.y = y;
+              found = true;
+              break;
+            }
+          }
+        }
+        if (!found) {
+          throw new Error(
+            `expandBuildingSpecs: 建築 type "${spec.type}" 找不到可用地形；已掃描範圍 x=0..${grid - 1}, y=0..${grid - 1}`,
+          );
+        }
+        placementState.buildings.push(building);
+      }
+      buildings.push(building);
     }
   }
   return buildings;
@@ -324,7 +393,9 @@ export function main(argv: string[] = process.argv.slice(2)): void {
     seed: args.seed,
     ticks: args.ticks,
     sampleEvery: args.sampleEvery,
-    buildings: args.buildings === undefined ? [] : expandBuildingSpecs(args.buildings, args.grid),
+    buildings:
+      args.fullSim || args.buildings === undefined ? [] : expandBuildingSpecs(args.buildings, args.grid),
+    buildingSpecs: args.fullSim ? args.buildings : undefined,
     fullSim: args.fullSim,
     grid: args.grid,
     populationConfig,

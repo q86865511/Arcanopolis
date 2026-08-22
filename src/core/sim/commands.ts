@@ -2,6 +2,7 @@
 
 import { addResource, getResource, type GameState } from '../world/state';
 import { footprintTiles, isAreaFree } from '../world/occupancy';
+import { canBuildAt } from '../world/buildable';
 import type { BuildingDef } from '../../data/types';
 
 export interface AddResourceCommand {
@@ -106,6 +107,8 @@ export function applyCommand(state: GameState, command: Command, defs: BuildingD
       const costEntries = Object.entries(def.cost);
       const canAfford = costEntries.every(([resource, amount]) => getResource(state, resource) >= amount);
       if (!canAfford) break; // 資源不足（任一項）→ 整筆跳過，不部分扣款
+
+      if (!canBuildAt(state, def, command.x, command.y, defs)) break; // 地形/邊界不符 → 靜默跳過
 
       for (const [resource, amount] of costEntries) {
         addResource(state, resource, -amount);

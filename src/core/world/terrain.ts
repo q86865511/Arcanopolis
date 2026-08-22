@@ -1,3 +1,5 @@
+import type { TerrainEconomy } from '../../data/types';
+
 // 地形核心：程序生成的島嶼地形。純函數、無狀態、決定論——地形不進存檔，
 // 只有玩家改動過的格子以 GameState.terrainOverrides（稀疏 map）記錄。
 // 因此任何 (seed, worldSize, x, y) 都能單獨算出結果，不需先算鄰居、不需預先建網格。
@@ -17,9 +19,20 @@ export const TERRAIN_GENERATOR_VERSION = 1;
  *  省略 type 代表地形本身沒被改過，查詢時落回程序生成的 baseTerrainAt。 */
 export interface TerrainOverride {
   type?: TerrainType;
-  /** 該格剩餘的可採集資源量（W3 資源耗竭用），非負有限數 */
+  /** 該格剩餘的可採集資源量，非負有限數 */
   resource?: number;
+  /** 該格資源耗盡的遊戲日，供森林再生判斷使用 */
+  depletedDay?: number;
 }
+
+/** 未注入經濟設定時的預設值；正式資料由 data/terrain-economy.json 注入。 */
+export const FOREST_WOOD_CAPACITY = 2400;
+export const ROCK_STONE_CAPACITY = 4800;
+export const DEFAULT_TERRAIN_ECONOMY: TerrainEconomy = {
+  forestWoodCapacity: FOREST_WOOD_CAPACITY,
+  rockStoneCapacity: ROCK_STONE_CAPACITY,
+  forestRegrowDays: 5,
+};
 
 const IMPASSABLE: ReadonlySet<TerrainType> = new Set<TerrainType>(['water', 'mountain']);
 
@@ -190,4 +203,62 @@ export function terrainAt(
     return override.type;
   }
   return baseTerrainAt(state.worldSeed, state.worldSize, x, y);
+}
+
+/** 尚未開採的單格地形資源容量。 */
+export function terrainResourceCapacity(
+  type: TerrainType,
+  economy: TerrainEconomy = DEFAULT_TERRAIN_ECONOMY,
+): number {
+  if (type === 'forest') return economy.forestWoodCapacity;
+  if (type === 'rock') return economy.rockStoneCapacity;
+  return 0;
+}
+
+type TerrainState = {
+  worldSeed: number;
+  worldSize: number;
+  terrainOverrides: Record<string, TerrainOverride>;
+};
+
+/** 查詢單格剩餘資源；override.resource 優先，否則視為該地形尚未開採、容量全滿。 */
+export function getTerrainResource(
+  state: TerrainState,
+  x: number,
+  y: number,
+  economy: TerrainEconomy = DEFAULT_TERRAIN_ECONOMY,
+): number {
+  const override = ownOverride(state.terrainOverrides, `${x},${y}`);
+  if (override?.resource !== undefined) {
+    return override.resource;
+  }
+  return terrainResourceCapacity(terrainAt(state, x, y), economy);
+}
+
+/** 扣除單格地形資源並回傳實際扣除量；耗盡時地形翻為 grass，耗盡日由呼叫端填入。 */
+export function consumeTerrainResource(
+  state: TerrainState,
+  x: number,
+  y: number,
+  amount: number,
+  economy: TerrainEconomy = DEFAULT_TERRAIN_ECONOMY,
+): number {
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error(`consumeTerrainResource: amount 必須是有限非負數，收到 ${amount}`);
+  }
+  if (amount === 0) return 0;
+
+  const available = getTerrainResource(state, x, y, economy);
+  if (available <= 0) return 0;
+
+  const consumed = Math.min(available, amount);
+  const remaining = available - consumed;
+  const key = `${x},${y}`;
+  const previous = ownOverride(state.terrainOverrides, key);
+  state.terrainOverrides[key] = {
+    ...previous,
+    ...(remaining === 0 ? { type: 'grass' as const } : {}),
+    resource: remaining,
+  };
+  return consumed;
 }

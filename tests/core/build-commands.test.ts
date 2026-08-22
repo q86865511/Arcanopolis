@@ -197,6 +197,7 @@ describe('R5：placeBuilding 語義（tick 套用時）', () => {
 
   it('三關全過（型別存在、無重疊、資源足夠）→ 逐項扣 cost、append Building', () => {
     const state = createInitialState(1);
+    state.terrainOverrides['3,4'] = { type: 'grass' };
     state.resources.wood = 20;
     const sim = new Simulation(state, [], defs);
 
@@ -209,6 +210,7 @@ describe('R5：placeBuilding 語義（tick 套用時）', () => {
 
   it('多資源成本成功路徑：逐項扣除所有 cost 資源', () => {
     const state = createInitialState(1);
+    state.terrainOverrides['1,1'] = { type: 'grass' };
     state.resources.wood = 20;
     state.resources.stone = 10;
     const sim = new Simulation(state, [], defs);
@@ -223,6 +225,7 @@ describe('R5：placeBuilding 語義（tick 套用時）', () => {
 
   it('資源剛好等於成本（getResource === cost）→ 仍可成功建造，不因邊界被拒', () => {
     const state = createInitialState(1);
+    state.terrainOverrides['0,0'] = { type: 'grass' };
     state.resources.wood = 15; // house 成本恰為 15
     const sim = new Simulation(state, [], defs);
 
@@ -263,6 +266,9 @@ describe('R6：removeBuilding 語義', () => {
 describe('R7：決定論與存檔', () => {
   function buildSim(seed: number): { sim: Simulation; state: ReturnType<typeof createInitialState> } {
     const state = createInitialState(seed);
+    for (const key of ['0,0', '5,5', '6,5', '5,6', '6,6', '8,8']) {
+      state.terrainOverrides[key] = { type: 'grass' };
+    }
     state.resources.wood = 100;
     state.resources.stone = 100;
     const sim = new Simulation(state, [], defs);
@@ -324,6 +330,7 @@ describe('R8：applyCommand 窮盡守衛', () => {
 describe('M2：id 帶 #tick 防 ABA（place→tick→remove→tick→place 同格→tick）', () => {
   it('兩次放置同格的 id 不同；重蓋後回放舊 id 的 removeBuilding 不會刪到新棟', () => {
     const state = createInitialState(1);
+    state.terrainOverrides['0,0'] = { type: 'grass' };
     state.resources.wood = 100;
     const sim = new Simulation(state, [], defs);
 

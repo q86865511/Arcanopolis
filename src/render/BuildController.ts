@@ -5,9 +5,10 @@
 // 預覽的顏色，不是權威判定——真正的守門在 core/sim/commands.ts 的 applyCommand。
 
 import Phaser from 'phaser';
-import { footprintTiles, isAreaFree } from '../core/world/occupancy';
+import { footprintTiles } from '../core/world/occupancy';
 import type { Simulation } from '../core/sim/simulation';
 import { getResource, type Building, type GameState } from '../core/world/state';
+import { canBuildAt } from '../core/world/buildable';
 import type { BuildingDef } from '../data/types';
 import { BUILDING_DEFS, buildingSize } from './defs';
 import { GRID_SIZE } from './demoWorld';
@@ -176,8 +177,7 @@ export class BuildController {
     if (gx + def.size.w > GRID_SIZE || gy + def.size.h > GRID_SIZE) {
       return false;
     }
-    const tiles = footprintTiles(gx, gy, def.size.w, def.size.h);
-    if (!isAreaFree(this.state, tiles, BUILDING_DEFS)) {
+    if (!canBuildAt(this.state, def, gx, gy, BUILDING_DEFS)) {
       return false;
     }
     return Object.entries(def.cost).every(

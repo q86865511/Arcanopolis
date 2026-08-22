@@ -4,10 +4,13 @@
 
 import buildingsJson from '../../data/buildings.json';
 import resourcesJson from '../../data/resources.json';
-import { parseBuildingDefs, parseResourceDefs } from '../data/loader';
+import terrainEconomyJson from '../../data/terrain-economy.json';
+import { parseBuildingDefs, parseResourceDefs, parseTerrainEconomy } from '../data/loader';
 import type { BuildingDef } from '../data/types';
 
 export const RESOURCE_DEFS = parseResourceDefs(resourcesJson);
+
+export const TERRAIN_ECONOMY = parseTerrainEconomy(terrainEconomyJson);
 
 export const BUILDING_DEFS = parseBuildingDefs(
   buildingsJson,

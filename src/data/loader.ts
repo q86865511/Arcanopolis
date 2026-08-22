@@ -1,8 +1,14 @@
 // 資料表載入驗證：JSON 讀入後型別是 unknown，一律經此處嚴格檢查才能當 ResourceDef/BuildingDef 使用。
 // 失敗一律 throw（不回傳 null/預設值），讓資料表錯誤在載入當下就曝光，而不是流竄到模擬邏輯裡。
 
-import { TERRAIN_TYPES } from '../core/world/terrain';
-import type { BuildingDef, PopulationConfig, ResourceDef, TerrainDef } from './types';
+import { TERRAIN_TYPES, type TerrainType } from '../core/world/terrain';
+import type {
+  BuildingDef,
+  PopulationConfig,
+  ResourceDef,
+  TerrainDef,
+  TerrainEconomy,
+} from './types';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
@@ -31,8 +37,10 @@ function rejectUnknownKeys(item: Record<string, unknown>, allowedKeys: readonly 
 
 const RESOURCE_DEF_KEYS = ['id', 'name'] as const;
 const TERRAIN_DEF_KEYS = ['id', 'name', 'walkable', 'buildable'] as const;
-const BUILDING_DEF_KEYS = ['id', 'name', 'size', 'cost', 'production', 'housing', 'jobs'] as const;
+const BUILDING_DEF_KEYS = ['id', 'name', 'size', 'cost', 'production', 'housing', 'jobs', 'terrain'] as const;
 const BUILDING_SIZE_KEYS = ['w', 'h'] as const;
+const BUILDING_TERRAIN_KEYS = ['on', 'near', 'consumes'] as const;
+const TERRAIN_ECONOMY_KEYS = ['forestWoodCapacity', 'rockStoneCapacity', 'forestRegrowDays'] as const;
 const POPULATION_CONFIG_KEYS = [
   'foodPerCitizenPerDay',
   'growthPerDay',
@@ -85,6 +93,45 @@ function validateAmounts(
   }
   // 回傳複本：與輸入 JSON 斷開參照，呼叫端改動 def 不會污染原始資料表物件
   return { ...(amounts as Record<string, number>) };
+}
+
+function validateBuildingTerrain(value: unknown, buildingId: string): BuildingDef['terrain'] {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isPlainObject(value)) {
+    throw new Error(
+      `parseBuildingDefs: 建築 "${buildingId}" 的 terrain 必須是物件，收到 ${JSON.stringify(value)}`,
+    );
+  }
+  rejectUnknownKeys(value, BUILDING_TERRAIN_KEYS, `parseBuildingDefs: 建築 "${buildingId}" 的 terrain`);
+
+  const validTypes = new Set<string>(TERRAIN_TYPES);
+  const validateList = (list: unknown, field: 'on' | 'near' | 'consumes'): TerrainType[] | undefined => {
+    if (list === undefined) return undefined;
+    if (!Array.isArray(list) || list.length === 0) {
+      throw new Error(
+        `parseBuildingDefs: 建築 "${buildingId}" 的 terrain.${field} 必須是非空地形陣列，收到 ${JSON.stringify(list)}`,
+      );
+    }
+    for (const type of list) {
+      if (typeof type !== 'string' || !validTypes.has(type)) {
+        throw new Error(
+          `parseBuildingDefs: 建築 "${buildingId}" 的 terrain.${field} 必須只含合法地形，收到 ${JSON.stringify(type)}`,
+        );
+      }
+    }
+    return [...list] as TerrainType[];
+  };
+
+  const on = validateList(value.on, 'on');
+  const near = validateList(value.near, 'near');
+  const consumes = validateList(value.consumes, 'consumes');
+  return {
+    ...(on === undefined ? {} : { on }),
+    ...(near === undefined ? {} : { near }),
+    ...(consumes === undefined ? {} : { consumes }),
+  };
 }
 
 export function parseResourceDefs(input: unknown): ResourceDef[] {
@@ -173,7 +220,7 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素必須是物件，收到 ${JSON.stringify(item)}`);
     }
     rejectUnknownKeys(item, BUILDING_DEF_KEYS, `parseBuildingDefs: 第 ${index} 個元素`);
-    const { id, name, size, cost, production, housing, jobs } = item;
+    const { id, name, size, cost, production, housing, jobs, terrain } = item;
 
     if (!isNonEmptyString(id)) {
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素的 id 必須是非空字串，收到 ${JSON.stringify(id)}`);
@@ -194,6 +241,7 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
     const validProduction = validateAmounts(production, 'production', id, resourceIds);
     const validHousing = validateCapacity(housing, 'housing', id);
     const validJobs = validateCapacity(jobs, 'jobs', id);
+    const validTerrain = validateBuildingTerrain(terrain, id);
 
     if (seenIds.has(id)) {
       throw new Error(`parseBuildingDefs: id 重複 "${id}"`);
@@ -208,6 +256,7 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       production: validProduction,
       housing: validHousing,
       jobs: validJobs,
+      ...(validTerrain === undefined ? {} : { terrain: validTerrain }),
     });
   }
 
@@ -254,5 +303,26 @@ export function parsePopulationConfig(input: unknown): PopulationConfig {
       'starvationDeathsPerDay',
       'positiveInteger',
     ),
+  };
+}
+
+export function parseTerrainEconomy(input: unknown): TerrainEconomy {
+  if (!isPlainObject(input)) {
+    throw new Error(`parseTerrainEconomy: 輸入必須是物件，收到 ${JSON.stringify(input)}`);
+  }
+  rejectUnknownKeys(input, TERRAIN_ECONOMY_KEYS, 'parseTerrainEconomy');
+
+  const readPositiveInteger = (field: keyof TerrainEconomy): number => {
+    const value = input[field];
+    if (!isPositiveInteger(value)) {
+      throw new Error(`parseTerrainEconomy: ${field} 必須是正整數，收到 ${JSON.stringify(value)}`);
+    }
+    return value;
+  };
+
+  return {
+    forestWoodCapacity: readPositiveInteger('forestWoodCapacity'),
+    rockStoneCapacity: readPositiveInteger('rockStoneCapacity'),
+    forestRegrowDays: readPositiveInteger('forestRegrowDays'),
   };
 }

@@ -386,6 +386,14 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
         `deserializeGameState: terrainOverrides["${key}"].resource 必須是有限非負數，收到 ${JSON.stringify(o.resource)}`,
       );
     }
+    if (
+      o.depletedDay !== undefined &&
+      (typeof o.depletedDay !== 'number' || !Number.isInteger(o.depletedDay) || o.depletedDay <= 0)
+    ) {
+      throw new Error(
+        `deserializeGameState: terrainOverrides["${key}"].depletedDay 必須是正整數，收到 ${JSON.stringify(o.depletedDay)}`,
+      );
+    }
   }
 
   const pendingCommands = raw.pendingCommands;

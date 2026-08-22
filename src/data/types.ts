@@ -1,6 +1,8 @@
 // 資料表型別：建築/資源數值定義，對應 data\resources.json、data\buildings.json。
 // 這些型別描述「合法資料的形狀」，實際載入驗證見 loader.ts 的 parseResourceDefs/parseBuildingDefs。
 
+import type { TerrainType } from '../core/world/terrain';
+
 export interface ResourceDef {
   id: string;
   name: string;
@@ -18,6 +20,12 @@ export interface BuildingDef {
   housing: number;
   /** 可提供工作數；資料表省略時由 loader 正規化為 0 */
   jobs: number;
+  /** 地形規則：on/near 僅限制擺放；consumes 宣告生產時可消耗的地形資源。 */
+  terrain?: {
+    on?: TerrainType[];
+    near?: TerrainType[];
+    consumes?: TerrainType[];
+  };
 }
 
 /** 地形定義，對應 data\terrain.json。id 必須是 core\world\terrain.ts 的 TerrainType；
@@ -40,4 +48,11 @@ export interface PopulationConfig {
   growthFoodReserveDays: number;
   /** 糧食耗盡時每日餓死居民數 */
   starvationDeathsPerDay: number;
+}
+
+/** 地形資源與森林再生常數，對應 data\terrain-economy.json。 */
+export interface TerrainEconomy {
+  forestWoodCapacity: number;
+  rockStoneCapacity: number;
+  forestRegrowDays: number;
 }

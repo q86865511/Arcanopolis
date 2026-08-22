@@ -5,7 +5,8 @@
     "size": { "w": 1, "h": 1 },
     "cost": { "wood": 20, "gold": 10 },
     "production": { "wood": 2 },
-    "jobs": 2
+    "jobs": 2,
+    "terrain": { "near": ["forest"], "consumes": ["forest"] }
   },
   {
     "id": "quarry",
@@ -13,7 +14,8 @@
     "size": { "w": 1, "h": 1 },
     "cost": { "wood": 30, "gold": 15 },
     "production": { "stone": 2 },
-    "jobs": 2
+    "jobs": 2,
+    "terrain": { "on": ["rock"], "consumes": ["rock"] }
   },
   {
     "id": "farm",
@@ -21,7 +23,8 @@
     "size": { "w": 1, "h": 1 },
     "cost": { "wood": 25, "gold": 5 },
     "production": { "food": 3 },
-    "jobs": 2
+    "jobs": 2,
+    "terrain": { "on": ["grass"] }
   },
   {
     "id": "house",
@@ -29,6 +32,7 @@
     "size": { "w": 1, "h": 1 },
     "cost": { "wood": 15, "gold": 5 },
     "production": {},
-    "housing": 4
+    "housing": 4,
+    "terrain": { "on": ["grass", "sand"] }
   }
 ]
