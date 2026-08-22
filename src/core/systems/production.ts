@@ -1,5 +1,6 @@
-// 生產 system：每 tick 依 state.buildings 的 type 對應 BuildingDef.production 累加資源。
-// 純資料驅動、不消耗 rng——生產量由資料表決定，不涉及隨機性。
+// 生產 system：每 tick 依 state.buildings 的 type 對應 BuildingDef.production 累加資源，
+// 產出乘以在職率（def.jobs===0 視為 1，否則為 min(在職人數, jobs) / jobs）。
+// 純資料驅動、不消耗 rng——生產量由資料表與在職人數決定，不涉及隨機性。
 
 import type { BuildingDef } from '../../data/types';
 import { addResource } from '../world/state';
@@ -20,10 +21,20 @@ export function createProductionSystem(defs: BuildingDef[]): System {
           );
         }
       }
+
+      // 各建築目前在職數，僅計入 job 指向該建築 id 的 citizen
+      const employed = new Map<string, number>();
+      for (const citizen of state.citizens) {
+        if (citizen.job !== null) {
+          employed.set(citizen.job, (employed.get(citizen.job) ?? 0) + 1);
+        }
+      }
+
       for (const building of state.buildings) {
         const def = defsByType.get(building.type)!;
+        const ratio = def.jobs === 0 ? 1 : Math.min(employed.get(building.id) ?? 0, def.jobs) / def.jobs;
         for (const [resourceId, amount] of Object.entries(def.production)) {
-          addResource(state, resourceId, amount);
+          addResource(state, resourceId, amount * ratio);
         }
       }
     },

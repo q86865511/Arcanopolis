@@ -145,6 +145,19 @@ export function runFastForward(options: FastForwardOptions): FastForwardResult {
 
   const state = createInitialState(options.seed);
   state.buildings = options.buildings.map((building) => ({ ...building }));
+  // 滿編就業情境：M3 起產出按在職率計算，快轉工具給每棟建築直接配滿工人，
+  // 曲線代表「理想產能」；真實人口成長曲線由 population system 情境另跑（T5）。
+  // home 借用工作建築本身——僅為滿足存檔引用存在性，快轉情境不模擬住房。
+  state.citizens = state.buildings.flatMap((building) => {
+    const def = buildingDefs.find((d) => d.id === building.type);
+    return Array.from({ length: def?.jobs ?? 0 }, (_, i) => ({
+      id: `${building.id}-worker-${i}`,
+      home: building.id,
+      job: building.id,
+      x: building.x,
+      y: building.y,
+    }));
+  });
   const simulation = new Simulation(state, [createProductionSystem(buildingDefs)], buildingDefs);
   const rows = [['tick', 'totalDay', ...resourceDefs.map((definition) => definition.id)].join(','), csvRow(state)];
 

@@ -51,6 +51,10 @@
   升版任務評估是否對指令快照成本。遷移撰寫紀律：每次升版同步擴充 deserialize 欄位驗證。
 - [審查登記] fastforward main 接線無自動化測試（I/O 皮層排除）；改動 main 參數傳遞時手動冒煙。
 - [審查登記] uiCamera 尺寸取 create 當下值：改用 RESIZE/FIT scale 模式時需同步處理 HUD 裁切。
+- [審查登記 M3] A* 效能：popLowest O(n) 掃描＋日界全城同步重算，40×40/150 人實測 407ms/tick——
+  擴圖前需 binary heap＋錯峰/分幀；jobs 無空缺仍每 tick 全掃屬同類（F6/F11）。
+- [審查登記 M3] 負糧食時日界消耗反向補正至 0（現無觸發路徑，F9）；在職率使資源出現小數，
+  日後 cost 可負擔判定與糧食比較需注意浮點（F10 已修顯示層）。
 - ~~SAVE_SCHEMA_VERSION 升 v2 必補端到端遷移測試~~——已於 M2-W2 修正批完成（v1 存檔經 no-op 遷移
   載入＋無遷移 throw＋續跑測試均已落地）。
 
