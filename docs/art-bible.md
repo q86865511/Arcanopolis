@@ -26,6 +26,12 @@
 ## 解析度規格
 
 - Tile 尺寸：等距菱形 **64×32**（2:1 投影）
+- 地形 tile 一律套用精確二值菱形遮罩：以 `(32,16)` 為中心，判定式為
+  `|x-32| + 2×|y-16| ≤ 32`；遮罩內 alpha = 255、遮罩外 alpha = 0，相鄰 tile
+  的邊界像素必須重疊，鋪排後不得透出背景
+- 地形 tile 的四條菱形接縫邊緣必須是**零透明像素**，不得以 trim、resize 或 alpha
+  閾值化結果直接充當最終遮罩
+- 地形類素材**不加 1px 描邊**，避免鋪排後形成黑色網格；描邊只用於建築與單位
 - 建築：佔格 N×N tiles；sprite 畫布寬 = N×64px，高度依建築體量、上限 = 寬×1.5
   （塔類高建築放寬至 寬×1.75）；錨點 = 底面菱形中心（貼齊地格）
 - **無底座規則**（2026-08-21 使用者裁決）：建築 sprite 不帶任何地面/草地/石板底座，
@@ -39,7 +45,7 @@
 ## 光源與描邊
 
 - 光源方向：**左上 45°**，全素材一致（等距建築左立面亮、右立面暗）
-- 描邊：**1px 深色描邊（#222034）**，全素材一致
+- 描邊：建築與單位使用 **1px 深色描邊（#222034）**；地形 tile 不使用描邊
 
 ## $imagegen 風格前綴（每批生圖 prompt 逐字帶上）
 
@@ -52,8 +58,16 @@ ground base tile and no terrain under it, footprint aligned to an isometric diam
 grid, plain solid white background, no drop shadow
 ```
 
-（地形類素材——農田、道路、草地等本身即為 tile 者——把「building only…no terrain」段
-換回「subject is a single isometric diamond terrain tile」，其餘前綴不變。）
+地形類素材（農田、道路、草地等本身即為 tile 者）改用以下前綴，不得帶建築／單位的
+`1px dark outline`：
+
+```
+pixel art, isometric 2:1 projection, medieval fantasy city-builder terrain tile,
+DawnBringer DB32 32-color palette, top-left 45-degree lighting, flat shading with
+subtle dithering, no outline, no anti-aliasing, crisp pixel edges, subject is a single
+isometric diamond terrain tile that fills the entire diamond with no blank pixels along
+any edge, grid-aligned 64x32 footprint, plain solid white background, no drop shadow
+```
 
 ## 參考圖組（每批生圖附上）
 

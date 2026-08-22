@@ -31,6 +31,8 @@
 - 視覺驗證截圖：`npm run screenshot -- [--out path.png] [--wait ms] [--port n]`
   ——自起 vite（預設 5199）→ chromium 截圖 → 關閉；頁面無 canvas 或有 pageerror 時 exit 1。
   render 層改動收尾必跑一次產證據圖。
+- **render 改動後分頁必須硬重載**：Vite HMR 對 Phaser 場景不乾淨，長開的分頁會停在新舊混雜狀態
+  （曾造成「整格地形沒畫出來」的假象）。回報視覺異常時先在乾淨 port 探測重現，再開始追 bug。
 
 ## core 慣例（M1 起生效）
 
