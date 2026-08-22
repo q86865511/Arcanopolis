@@ -4,17 +4,6 @@
 import { TILE_H, depthKey, tileCenter, type ScreenPoint } from './iso';
 
 /**
- * 地形 sprite 的錨點：origin(0.5, 0.5) 配 tileCenter。
- * 地形圖是 64×32 的完整菱形，圖中心恰為菱形中心。
- */
-export function terrainAnchor(gx: number, gy: number): ScreenPoint {
-  return tileCenter(gx, gy);
-}
-
-export const TERRAIN_ORIGIN_X = 0.5;
-export const TERRAIN_ORIGIN_Y = 0.5;
-
-/**
  * 建築 sprite 的錨點：origin(0.5, 1)（底邊中央）配本函式回傳的點。
  * 回傳點 = 地格菱形的「底頂點」（tileCenter 再往下 TILE_H/2）——實測素材（house-01、farm-01、
  * quarry-01）的底面菱形最後一列都落在圖的最底列，故底邊對齊底頂點時底面菱形正好蓋住地格。

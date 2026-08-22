@@ -7,18 +7,15 @@ import { BuildController } from './BuildController';
 import { CameraController } from './CameraController';
 import { computeCameraBounds } from './cameraBounds';
 import { buildingSize } from './defs';
-import { GRID_SIZE, createDemoWorld, terrainTextureAt } from './demoWorld';
+import { createDemoWorld } from './demoWorld';
 import { Hud } from './hud';
 import { TILE_H, TILE_W, gridToScreen, tileCenter } from './iso';
+import { TerrainRenderer, type TerrainRenderMetrics } from './TerrainRenderer';
 import {
   BUILDING_ORIGIN_X,
   BUILDING_ORIGIN_Y,
-  TERRAIN_DEPTH,
-  TERRAIN_ORIGIN_X,
-  TERRAIN_ORIGIN_Y,
   buildingAnchor,
   buildingDepth,
-  terrainAnchor,
 } from './placement';
 import { footprintTiles } from '../core/world/occupancy';
 import type { Simulation } from '../core/sim/simulation';
@@ -65,12 +62,25 @@ export const SIM_TICK_MS = 100;
 /** 單幀最多補跑幾個 tick。分頁切回來時一次補上千 tick 會直接凍住畫面。 */
 export const MAX_TICKS_PER_FRAME = 5;
 
+/** 僅供大世界驗收探針使用；一般開局不帶參數時仍採 core 的預設 worldSize。 */
+function requestedWorldSize(): number | undefined {
+  const raw = new URLSearchParams(window.location.search).get('worldSize');
+  if (raw === null) return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 10 || value > 2000) {
+    console.warn(`[CityScene] 忽略不合法的 worldSize query：${raw}`);
+    return undefined;
+  }
+  return value;
+}
+
 export class CityScene extends Phaser.Scene {
   private state!: GameState;
   private sim!: Simulation;
   private camera!: CameraController;
   private hud!: Hud;
   private build!: BuildController;
+  private terrain!: TerrainRenderer;
   /** 只渲染 HUD 的第二台攝影機（zoom 固定 1），見 hud.ts 開頭說明。 */
   private uiCamera!: Phaser.Cameras.Scene2D.Camera;
   private readonly buildingSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -87,6 +97,11 @@ export class CityScene extends Phaser.Scene {
   private readonly warnedMissingTextures = new Set<string>();
   /** 世界包圍盒（地圖 + 邊距，世界座標）。固定值，只在 create 算一次。 */
   private worldBounds = { x: 0, y: 0, w: 0, h: 0 };
+  /**
+   * 只保存稀疏 terrainOverrides 的 key→type，不掃 worldSize²。每次 sim tick 後比較一次，
+   * 可抓新增、刪除與 type 改變；resource-only 變動不重烘，因為畫面地形沒有改變。
+   */
+  private terrainOverrideTypes = new Map<string, string>();
   private accumulator = 0;
 
   constructor() {
@@ -94,7 +109,7 @@ export class CityScene extends Phaser.Scene {
   }
 
   create(): void {
-    const world = createDemoWorld();
+    const world = createDemoWorld(requestedWorldSize());
     this.state = world.state;
     this.sim = world.sim;
     this.accumulator = 0;
@@ -102,14 +117,11 @@ export class CityScene extends Phaser.Scene {
     this.citizenSprites.clear();
     this.knownBuildingIds.clear();
     this.buildingTiles.clear();
+    this.terrainOverrideTypes = this.snapshotTerrainOverrideTypes();
 
     // UI 攝影機要先建立：之後每個「世界」物件建立時都得叫它忽略，否則會被畫第二次
     this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height);
     this.uiCamera.setName('ui');
-
-    this.drawTerrain();
-    this.syncBuildings();
-    this.syncCitizens();
 
     this.camera = new CameraController(this);
     this.camera.attach();
@@ -117,10 +129,11 @@ export class CityScene extends Phaser.Scene {
     // 世界包圍盒＝地圖外加一圈邊距（上方多留建築高度的頭部空間）。
     // 這是「世界有多大」，與視窗無關；攝影機實際 bounds 由 applyCameraBounds 依視窗再算。
     const margin = TILE_W * 2;
-    const left = gridToScreen(0, GRID_SIZE - 1).x - TILE_W / 2;
-    const right = gridToScreen(GRID_SIZE - 1, 0).x + TILE_W / 2;
+    const worldSize = this.state.worldSize;
+    const left = gridToScreen(0, worldSize - 1).x - TILE_W / 2;
+    const right = gridToScreen(worldSize - 1, 0).x + TILE_W / 2;
     const top = gridToScreen(0, 0).y;
-    const bottom = gridToScreen(GRID_SIZE - 1, GRID_SIZE - 1).y + TILE_H;
+    const bottom = gridToScreen(worldSize - 1, worldSize - 1).y + TILE_H;
     this.worldBounds = {
       x: left - margin,
       y: top - margin - TILE_H * 3,
@@ -130,12 +143,17 @@ export class CityScene extends Phaser.Scene {
     this.applyCameraBounds();
 
     // 開場把地圖中心對準畫面中央：地圖中心即中央那格的菱形中心
-    const mid = (GRID_SIZE - 1) / 2;
-    const center = tileCenter(mid, mid);
+    const center = tileCenter(world.startCenter.x, world.startCenter.y);
     this.camera.centerOn(center.x, center.y);
+
+    this.terrain = new TerrainRenderer(this, this.state, this.uiCamera);
+    this.terrain.update(this.cameras.main);
+    this.syncBuildings();
+    this.syncCitizens();
 
     this.hud = new Hud(this, this.state);
     this.hud.create();
+    this.hud.updateViewport(this.cameras.main);
     this.cameras.main.ignore(this.hud.displayObjects);
 
     this.build = new BuildController(this, this.state, this.sim, (def) => this.hud.setSelection(def));
@@ -147,6 +165,7 @@ export class CityScene extends Phaser.Scene {
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
+      this.terrain.destroy();
     });
   }
 
@@ -202,9 +221,14 @@ export class CityScene extends Phaser.Scene {
     this.applyCameraBounds();
 
     let ticks = 0;
+    const terrainChanges = new Map<string, { x: number; y: number }>();
     this.accumulator += deltaMs;
     while (this.accumulator >= SIM_TICK_MS && ticks < MAX_TICKS_PER_FRAME) {
       this.sim.tick();
+      for (const tile of this.detectTerrainOverrideChanges()) {
+        this.terrain.invalidateTile(tile.x, tile.y);
+        terrainChanges.set(`${tile.x},${tile.y}`, tile);
+      }
       this.accumulator -= SIM_TICK_MS;
       ticks += 1;
     }
@@ -220,29 +244,48 @@ export class CityScene extends Phaser.Scene {
       this.syncCitizens();
       this.hud.refresh();
     }
+    if (terrainChanges.size > 0) this.hud.updateTerrain([...terrainChanges.values()]);
+
+    this.terrain.update(this.cameras.main);
+    this.hud.updateViewport(this.cameras.main);
     // 預覽每幀更新：滑鼠沒動但攝影機動了，hover 的格子也會變
     this.build.update();
   }
 
-  private drawTerrain(): void {
-    const images: Phaser.GameObjects.Image[] = [];
-    for (let gy = 0; gy < GRID_SIZE; gy++) {
-      for (let gx = 0; gx < GRID_SIZE; gx++) {
-        const key = terrainTextureAt(gx, gy);
-        if (!this.textures.exists(key)) {
-          // 地形素材缺漏＝整張圖都會是 Phaser 的 __MISSING 綠白格，直接指路 assets.ts
-          throw new Error(`CityScene: 地形素材 "${key}" 未載入——檢查 src/render/assets.ts 的 GAME_TEXTURES`);
-        }
-        const anchor = terrainAnchor(gx, gy);
-        images.push(
-          this.add
-            .image(anchor.x, anchor.y, key)
-            .setOrigin(TERRAIN_ORIGIN_X, TERRAIN_ORIGIN_Y)
-            .setDepth(TERRAIN_DEPTH),
-        );
+  /** 提供瀏覽器效能探針讀取，不暴露或改寫 core state。 */
+  getTerrainMetrics(): TerrainRenderMetrics {
+    return this.terrain.metrics;
+  }
+
+  private snapshotTerrainOverrideTypes(): Map<string, string> {
+    const snapshot = new Map<string, string>();
+    for (const [key, override] of Object.entries(this.state.terrainOverrides)) {
+      snapshot.set(key, override.type ?? '');
+    }
+    return snapshot;
+  }
+
+  private detectTerrainOverrideChanges(): Array<{ x: number; y: number }> {
+    const next = this.snapshotTerrainOverrideTypes();
+    const changedKeys = new Set<string>();
+    for (const [key, type] of next) {
+      if (!this.terrainOverrideTypes.has(key) || this.terrainOverrideTypes.get(key) !== type) {
+        changedKeys.add(key);
       }
     }
-    this.uiCamera.ignore(images);
+    for (const key of this.terrainOverrideTypes.keys()) {
+      if (!next.has(key)) changedKeys.add(key);
+    }
+    this.terrainOverrideTypes = next;
+
+    const changed: Array<{ x: number; y: number }> = [];
+    for (const key of changedKeys) {
+      const [xText, yText] = key.split(',');
+      const x = Number(xText);
+      const y = Number(yText);
+      if (Number.isInteger(x) && Number.isInteger(y)) changed.push({ x, y });
+    }
+    return changed;
   }
 
   /**

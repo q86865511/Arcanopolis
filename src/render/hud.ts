@@ -8,6 +8,7 @@
 import Phaser from 'phaser';
 import { BUILDING_DEFS, RESOURCE_DEFS, resourceName } from './defs';
 import { computeBarsLayout, fitFontSize } from './hudLayout';
+import { Minimap, type MinimapTile } from './Minimap';
 import { getResource, type GameState } from '../core/world/state';
 import type { BuildingDef } from '../data/types';
 
@@ -45,6 +46,7 @@ export class Hud {
   private bars!: Phaser.GameObjects.Graphics;
   private resourceText!: Phaser.GameObjects.Text;
   private selectionText!: Phaser.GameObjects.Text;
+  private minimap!: Minimap;
   /** 最近一次 layout() 的視窗寬度：refresh()/setSelection() 換了文字內容後要用同一個寬度重算字級。 */
   private lastWidth = 0;
 
@@ -76,6 +78,10 @@ export class Hud {
     });
     this.register(this.selectionText);
 
+    this.minimap = new Minimap(this.scene, this.state, HUD_DEPTH + 10);
+    this.minimap.create();
+    this.objects.push(...this.minimap.displayObjects);
+
     this.layout(this.scene.scale.width, this.scene.scale.height);
   }
 
@@ -98,6 +104,7 @@ export class Hud {
 
     this.resourceText.setPosition(TEXT_PAD_X, TOP_TEXT_PAD_Y);
     this.selectionText.setPosition(TEXT_PAD_X, barsLayout.bottomTextY);
+    this.minimap.layout(width, height, TOP_BAR_H, BOTTOM_BAR_H);
 
     this.fitTextToWidth();
   }
@@ -122,6 +129,14 @@ export class Hud {
   refresh(): void {
     this.resourceText.setText(this.formatResources());
     this.fitTextToWidth();
+  }
+
+  updateTerrain(tiles: readonly MinimapTile[]): void {
+    this.minimap.updateTerrain(tiles);
+  }
+
+  updateViewport(camera: Phaser.Cameras.Scene2D.Camera): void {
+    this.minimap.updateViewport(camera);
   }
 
   setSelection(def: BuildingDef | null): void {

@@ -2,6 +2,8 @@
 // URL 一律用 new URL(..., import.meta.url) 取得——Vite 在 dev 與 build 都會解析這個模式，
 // 路徑寫死成字面值是必要條件（動態拼接會讓 Vite 靜態分析失效，build 後 404）。
 
+import type { TerrainType } from '../core/world/terrain';
+
 export interface TextureEntry {
   /** Phaser texture key，等於檔名去掉 .png */
   key: string;
@@ -9,16 +11,25 @@ export interface TextureEntry {
 }
 
 /** 地形 texture key（64×32 完整菱形，圖中心即 tileCenter）。 */
-export const TERRAIN_TEXTURES = {
-  grassA: 'tile-grass-01',
-  grassB: 'tile-grass-02',
-  dirt: 'tile-dirt-01',
-} as const;
+export const TERRAIN_TEXTURE_BY_TYPE: Readonly<Record<TerrainType, string>> = {
+  water: 'tile-water-01',
+  sand: 'tile-sand-01',
+  grass: 'tile-grass-01',
+  forest: 'tile-forest-01',
+  rock: 'tile-rock-01',
+  mountain: 'tile-mountain-01',
+};
 
 export const GAME_TEXTURES: readonly TextureEntry[] = [
   { key: 'tile-grass-01', url: new URL('../../assets/game/tile-grass-01.png', import.meta.url).href },
   { key: 'tile-grass-02', url: new URL('../../assets/game/tile-grass-02.png', import.meta.url).href },
   { key: 'tile-dirt-01', url: new URL('../../assets/game/tile-dirt-01.png', import.meta.url).href },
+  { key: 'tile-water-01', url: new URL('../../assets/game/tile-water-01.png', import.meta.url).href },
+  { key: 'tile-sand-01', url: new URL('../../assets/game/tile-sand-01.png', import.meta.url).href },
+  { key: 'tile-forest-01', url: new URL('../../assets/game/tile-forest-01.png', import.meta.url).href },
+  { key: 'tile-rock-01', url: new URL('../../assets/game/tile-rock-01.png', import.meta.url).href },
+  { key: 'tile-ore-01', url: new URL('../../assets/game/tile-ore-01.png', import.meta.url).href },
+  { key: 'tile-mountain-01', url: new URL('../../assets/game/tile-mountain-01.png', import.meta.url).href },
   { key: 'lumber-camp-01', url: new URL('../../assets/game/lumber-camp-01.png', import.meta.url).href },
   { key: 'quarry-01', url: new URL('../../assets/game/quarry-01.png', import.meta.url).href },
   { key: 'farm-01', url: new URL('../../assets/game/farm-01.png', import.meta.url).href },

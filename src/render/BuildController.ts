@@ -11,7 +11,6 @@ import { getResource, type Building, type GameState } from '../core/world/state'
 import { canBuildAt } from '../core/world/buildable';
 import type { BuildingDef } from '../data/types';
 import { BUILDING_DEFS, buildingSize } from './defs';
-import { GRID_SIZE } from './demoWorld';
 import { BOTTOM_BAR_H, TOP_BAR_H } from './hud';
 import { TILE_H, TILE_W, hitTile, tileCenter, type GridPoint } from './iso';
 
@@ -162,21 +161,15 @@ export class BuildController {
     return pointer.y < TOP_BAR_H || pointer.y > height - BOTTOM_BAR_H;
   }
 
-  /** 滑鼠位置 → 格座標；落在地圖外回 null。經 positionToCamera 換算，否則平移縮放後會整片偏掉。 */
+  /** 滑鼠位置 → 格座標。範圍外也回傳，讓 canBuildAt 判 false 並保留紅色預覽。 */
   private pointerTile(pointer: Phaser.Input.Pointer): GridPoint | null {
     const world = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
     const { gx, gy } = hitTile(world.x, world.y);
-    if (gx < 0 || gy < 0 || gx >= GRID_SIZE || gy >= GRID_SIZE) {
-      return null;
-    }
     return { gx, gy };
   }
 
   private canPlace(def: BuildingDef, gx: number, gy: number): boolean {
-    // footprint 整塊都要在地圖內：起點在界內不代表右下角也在
-    if (gx + def.size.w > GRID_SIZE || gy + def.size.h > GRID_SIZE) {
-      return false;
-    }
+    // canBuildAt 以 state.worldSize 檢查負座標與完整 footprint 的四側邊界。
     if (!canBuildAt(this.state, def, gx, gy, BUILDING_DEFS)) {
       return false;
     }

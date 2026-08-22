@@ -1,8 +1,3 @@
-// M2 的世界建立點：組出「一座空城 + 開局資源 + 掛好 system 的 Simulation」交給呈現層。
-// render 對 state 一律唯讀（見 CLAUDE.md 架構鐵則 1）——本檔對 state 的直接寫入（開局資源／
-// 建築／居民）屬「建立 fixture」，只在世界誕生的那一刻發生；世界跑起來之後的一切變更都必須
-// 經 sim.enqueue 下指令。
-
 import populationJson from '../../data/population.json';
 import { parsePopulationConfig } from '../data/loader';
 import { Simulation } from '../core/sim/simulation';
@@ -11,102 +6,95 @@ import { createMovementSystem } from '../core/systems/movement';
 import { createPopulationSystem } from '../core/systems/population';
 import { createProductionSystem } from '../core/systems/production';
 import { createRegrowthSystem } from '../core/systems/regrowth';
+import { canBuildAt } from '../core/world/buildable';
 import { applyStartingResources } from '../core/world/scenario';
 import { createInitialState, type Building, type Citizen, type GameState } from '../core/world/state';
-import { TERRAIN_TEXTURES } from './assets';
 import { BUILDING_DEFS, RESOURCE_DEFS, TERRAIN_ECONOMY } from './defs';
-
-/** demo 地圖邊長（格）。 */
-export const GRID_SIZE = 12;
 
 const DEMO_SEED = 1;
 
 export interface DemoWorld {
   state: GameState;
   sim: Simulation;
+  startCenter: { x: number; y: number };
 }
 
 const validResourceIds = new Set(RESOURCE_DEFS.map((def) => def.id));
 const validBuildingTypes = new Set(BUILDING_DEFS.map((def) => def.id));
-
 const POPULATION_CONFIG = parsePopulationConfig(populationJson);
 
-/**
- * 開局建築：讓玩家一進場就看得到人口成長與居民走動，不必自己先蓋房子。
- * 直接寫入 state.buildings 屬 fixture 慣例（見上方檔頭說明），id 沿用 placeBuilding 指令的
- * 命名慣例（`${type}@${x},${y}#${tick}`）以利辨識，tick 固定為 0（世界誕生於 tick 0）。
- */
+/** 相對於搜尋 anchor 的固定配置；相對位置本身不重疊，合法性全部交給 core。 */
 const STARTING_BUILDINGS: ReadonlyArray<readonly [string, number, number]> = [
-  ['house', 4, 4],
-  ['house', 7, 4],
-  ['farm', 5, 6],
-  ['lumber-camp', 6, 2],
+  ['house', 0, 2],
+  ['house', 3, 2],
+  ['farm', 1, 4],
+  ['lumber-camp', 2, 0],
+];
+
+const STARTING_CITIZENS: ReadonlyArray<readonly [string, number]> = [
+  ['citizen#0-0', 0],
+  ['citizen#0-1', 1],
 ];
 
 /**
- * 開局居民：讓玩家一進場（首個日界 tick 600 之前）就看得到人口，不必空等 60 秒
- * （SIM_TICK_MS=100）人口才從 0 開始成長。分別安置在兩棟起始 house，job 待 jobs system
- * 首個 tick 自動指派。id 比照 population system 的成長命名慣例 `citizen#<tick>-<序號>`，
- * tick 固定為 0（與 STARTING_BUILDINGS 同理，世界誕生於 tick 0）。
+ * 從世界中心以 Chebyshev 環由內向外搜尋；每圈固定採上、右、下、左的順時針順序。
+ * 所有候選都交給 core canBuildAt，故真實地形、near 條件、footprint 與邊界使用同一判準。
  */
-const STARTING_CITIZENS: ReadonlyArray<readonly [string, string, number, number]> = [
-  ['citizen#0-0', 'house@4,4#0', 4, 4],
-  ['citizen#0-1', 'house@7,4#0', 7, 4],
-];
+function findStartingAnchor(state: GameState): { x: number; y: number } {
+  const layoutWidth = Math.max(...STARTING_BUILDINGS.map(([, dx]) => dx + 1));
+  const layoutHeight = Math.max(...STARTING_BUILDINGS.map(([, , dy]) => dy + 1));
+  const centerX = Math.floor((state.worldSize - layoutWidth) / 2);
+  const centerY = Math.floor((state.worldSize - layoutHeight) / 2);
 
-/**
- * demo 區的地形覆寫：render 目前畫的是自己的 terrainTextureAt 圖案，core 的地形卻來自
- * 程序生成的島嶼——demo 的 12×12 區塊落在 200×200 世界的角落，core 判定為 water，
- * 導致伐木場找不到森林來源而永遠產出 0。W4 會讓 render 直接讀 core 地形，屆時整段刪除；
- * 在那之前先把 demo 區覆寫成可玩的地形，讓地形綁定的產出鏈在遊戲裡真的跑得起來。
- */
-function applyDemoTerrain(state: GameState): void {
-  for (let gy = 0; gy < GRID_SIZE; gy++) {
-    for (let gx = 0; gx < GRID_SIZE; gx++) {
-      state.terrainOverrides[`${gx},${gy}`] = { type: 'grass' };
+  const fits = (x: number, y: number): boolean =>
+    STARTING_BUILDINGS.every(([type, dx, dy]) => {
+      const def = BUILDING_DEFS.find((candidate) => candidate.id === type);
+      if (def === undefined) throw new Error(`createDemoWorld: 找不到起始建築定義 "${type}"`);
+      return canBuildAt(state, def, x + dx, y + dy, BUILDING_DEFS);
+    });
+
+  for (let radius = 0; radius < state.worldSize; radius++) {
+    if (radius === 0) {
+      if (fits(centerX, centerY)) return { x: centerX, y: centerY };
+      continue;
     }
+    const left = centerX - radius;
+    const right = centerX + radius;
+    const top = centerY - radius;
+    const bottom = centerY + radius;
+    for (let x = left; x <= right; x++) if (fits(x, top)) return { x, y: top };
+    for (let y = top + 1; y <= bottom; y++) if (fits(right, y)) return { x: right, y };
+    for (let x = right - 1; x >= left; x--) if (fits(x, bottom)) return { x, y: bottom };
+    for (let y = bottom - 1; y > top; y--) if (fits(left, y)) return { x: left, y };
   }
-  // 伐木場 (6,2) 的北與東鄰給森林，開局即有木材來源；耗盡後可觀察到再生
-  for (const [gx, gy] of [
-    [6, 1],
-    [7, 2],
-    [6, 0],
-    [7, 1],
-  ] as const) {
-    state.terrainOverrides[`${gx},${gy}`] = { type: 'forest' };
-  }
-  // 一小片石礦，供玩家自行蓋採石場（quarry 的 terrain.on 要求 rock）
-  for (const [gx, gy] of [
-    [9, 8],
-    [10, 8],
-    [9, 9],
-  ] as const) {
-    state.terrainOverrides[`${gx},${gy}`] = { type: 'rock' };
-  }
+  throw new Error(`createDemoWorld: worldSize=${state.worldSize} 找不到可放置全部起始建築的區域`);
 }
 
-export function createDemoWorld(): DemoWorld {
+export function createDemoWorld(worldSize?: number): DemoWorld {
   const state = createInitialState(DEMO_SEED);
-  applyDemoTerrain(state);
+  if (worldSize !== undefined) {
+    if (!Number.isInteger(worldSize) || worldSize < 10 || worldSize > 2000) {
+      throw new Error(`createDemoWorld: worldSize 必須是 10~2000 的整數，收到 ${String(worldSize)}`);
+    }
+    state.worldSize = worldSize;
+  }
   applyStartingResources(state, validResourceIds);
 
-  for (const [type, x, y] of STARTING_BUILDINGS) {
-    // 資料表改版把建築 type 改名/移除時要當場曝光，不能讓開局建築悄悄變成不存在的 def
-    // （見 CLAUDE.md 資料驅動鐵則；否則要等 production system 在第一個 tick 才會炸開，
-    // 錯誤點離真正的成因——這份 fixture 常數——很遠）
+  const anchor = findStartingAnchor(state);
+  for (const [type, dx, dy] of STARTING_BUILDINGS) {
     if (!validBuildingTypes.has(type)) {
-      throw new Error(`createDemoWorld: STARTING_BUILDINGS 引用未知建築 type "${type}"`);
+      throw new Error(`createDemoWorld: STARTING_BUILDINGS 使用未知 type "${type}"`);
     }
+    const x = anchor.x + dx;
+    const y = anchor.y + dy;
     const building: Building = { id: `${type}@${x},${y}#0`, type, x, y };
     state.buildings.push(building);
   }
 
-  const validHomeIds = new Set(state.buildings.map((b) => b.id));
-  for (const [id, home, x, y] of STARTING_CITIZENS) {
-    if (!validHomeIds.has(home)) {
-      throw new Error(`createDemoWorld: STARTING_CITIZENS 引用未知建築 id "${home}"`);
-    }
-    const citizen: Citizen = { id, home, job: null, x, y };
+  for (const [id, homeIndex] of STARTING_CITIZENS) {
+    const home = state.buildings[homeIndex];
+    if (home === undefined) throw new Error(`createDemoWorld: homeIndex=${homeIndex} 不存在`);
+    const citizen: Citizen = { id, home: home.id, job: null, x: home.x, y: home.y };
     state.citizens.push(citizen);
   }
 
@@ -117,20 +105,17 @@ export function createDemoWorld(): DemoWorld {
       createProductionSystem(BUILDING_DEFS, TERRAIN_ECONOMY),
       createPopulationSystem(BUILDING_DEFS, POPULATION_CONFIG),
       createRegrowthSystem(TERRAIN_ECONOMY),
-      createMovementSystem(BUILDING_DEFS, { w: GRID_SIZE, h: GRID_SIZE }),
+      createMovementSystem(BUILDING_DEFS, { w: state.worldSize, h: state.worldSize }),
     ],
     BUILDING_DEFS,
   );
-  return { state, sim };
-}
 
-/**
- * 地形選圖：決定性規則，不用 RNG——同一格永遠是同一張圖，重繪／重開都一致。
- * 主對角線鋪泥土示意道路，其餘草地兩版依格座標雜湊混排避免整片重複。
- */
-export function terrainTextureAt(gx: number, gy: number): string {
-  if (gx === gy) {
-    return TERRAIN_TEXTURES.dirt;
-  }
-  return (gx * 31 + gy * 17) % 3 === 0 ? TERRAIN_TEXTURES.grassB : TERRAIN_TEXTURES.grassA;
+  return {
+    state,
+    sim,
+    startCenter: {
+      x: anchor.x + (Math.max(...STARTING_BUILDINGS.map(([, dx]) => dx)) + 1) / 2,
+      y: anchor.y + (Math.max(...STARTING_BUILDINGS.map(([, , dy]) => dy)) + 1) / 2,
+    },
+  };
 }
