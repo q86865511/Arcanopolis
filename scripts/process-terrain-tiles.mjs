@@ -6,10 +6,17 @@ import { spawnSync } from 'node:child_process'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(scriptDir, '..')
+// 地形 tile 清單：新增地形素材時加進來即可（輸入一律取自 assets\raw 的同名原始生圖）
 const tileNames = [
   'tile-grass-01.png',
   'tile-grass-02.png',
   'tile-dirt-01.png',
+  'tile-water-01.png',
+  'tile-sand-01.png',
+  'tile-forest-01.png',
+  'tile-rock-01.png',
+  'tile-ore-01.png',
+  'tile-mountain-01.png',
 ]
 
 function findMagick() {
