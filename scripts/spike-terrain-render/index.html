@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Arcanopolis — 地形渲染 spike</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      #app {
+        width: 100%;
+        height: 100%;
+      }
+      #app canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      M3.9-T2 技術驗證 spike 專用入口，與正式遊戲的 index.html 互相獨立。
+      不進遊戲正式渲染路徑，只讀 src/render/iso.ts、src/render/placement.ts 的既有等距座標公式。
+      用法見 harness.mjs 檔頭；查詢字串：?mode=rendertexture|tilemap&worldSize=N&chunkSize=N&zoom=N
+    -->
+    <div id="app"></div>
+    <script type="module" src="./spike.ts"></script>
+  </body>
+</html>

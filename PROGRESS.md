@@ -8,6 +8,16 @@
 
 ## 已完成
 
+- [2026-08-22] **M3.9-W1 完成**：地形核心（hash noise 程序生成、島嶼遮罩、terrainAt 查詢、
+  terrainOverrides 差異表）＋存檔 v4（三欄位＋from:3 遷移）。雙審 12 條全修：**C1 地形演算法
+  版本欄位**（防日後改生成常數使舊檔地圖變形而無錯誤訊息）、C2 遷移時為舊檔建築/居民腳下建
+  grass override、C3 override 鍵格式與越界驗證、C4 seed uint32 正規化、F1 序列化端守門、
+  F3 小數座標 fail fast、F4 own-property 測試改為原型污染式（原測試恆真）、F5 worldSize 下限 10
+  （代數保證在 size<5 崩潰）、F6 生成器指紋測試（原性質門檻擋不住常數突變）。終態 379 tests 綠。
+  **T2 渲染方案定案：分塊 RenderTexture、視野內才烘**（見 `.pipeline/reviews/2026-08-22-spike-
+  terrain-render.md`）——1000×1000 下 heap ~30MB 且初始化與世界大小解耦；Phaser 內建 isometric
+  Tilemap 遭否決（heap 256MB、cull 每幀掃全圖（原始碼確認）、且有未解的格間縫隙缺陷）。
+
 - [2026-08-22] **M3.5 視覺打磨波完成**（使用者實玩回報後插入）：視窗改 `Scale.RESIZE` 填滿
   （2K 全螢幕不再是小方框＋黑框，HUD 橫貫上下緣，另修 Phaser 邊界夾制把地圖釘左上角的問題）；
   村民走進建築格即隱藏＝「進屋工作」（探針 220 筆取樣零違反）。單審三個裁決項全通過

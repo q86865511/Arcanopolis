@@ -1,0 +1,8 @@
+[
+  { "id": "water", "name": "水域", "walkable": false, "buildable": false },
+  { "id": "sand", "name": "沙灘", "walkable": true, "buildable": true },
+  { "id": "grass", "name": "草地", "walkable": true, "buildable": true },
+  { "id": "forest", "name": "森林", "walkable": true, "buildable": true },
+  { "id": "rock", "name": "岩地", "walkable": true, "buildable": true },
+  { "id": "mountain", "name": "山地", "walkable": false, "buildable": false }
+]

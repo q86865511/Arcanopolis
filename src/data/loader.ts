@@ -1,7 +1,8 @@
 // 資料表載入驗證：JSON 讀入後型別是 unknown，一律經此處嚴格檢查才能當 ResourceDef/BuildingDef 使用。
 // 失敗一律 throw（不回傳 null/預設值），讓資料表錯誤在載入當下就曝光，而不是流竄到模擬邏輯裡。
 
-import type { BuildingDef, PopulationConfig, ResourceDef } from './types';
+import { TERRAIN_TYPES } from '../core/world/terrain';
+import type { BuildingDef, PopulationConfig, ResourceDef, TerrainDef } from './types';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
@@ -29,6 +30,7 @@ function rejectUnknownKeys(item: Record<string, unknown>, allowedKeys: readonly 
 }
 
 const RESOURCE_DEF_KEYS = ['id', 'name'] as const;
+const TERRAIN_DEF_KEYS = ['id', 'name', 'walkable', 'buildable'] as const;
 const BUILDING_DEF_KEYS = ['id', 'name', 'size', 'cost', 'production', 'housing', 'jobs'] as const;
 const BUILDING_SIZE_KEYS = ['w', 'h'] as const;
 const POPULATION_CONFIG_KEYS = [
@@ -110,6 +112,49 @@ export function parseResourceDefs(input: unknown): ResourceDef[] {
     }
     seenIds.add(id);
     defs.push({ id, name });
+  }
+
+  return defs;
+}
+
+/** 地形資料表驗證。id 必須是 core 的 TerrainType——資料表不得自創地形，
+ *  否則 render/UI 查得到而 core 的 isWalkable 判斷不到，兩邊悄悄不一致。 */
+export function parseTerrainDefs(input: unknown): TerrainDef[] {
+  if (!Array.isArray(input)) {
+    throw new Error(`parseTerrainDefs: 輸入必須是陣列，收到 ${JSON.stringify(input)}`);
+  }
+
+  const validIds = new Set<string>(TERRAIN_TYPES);
+  const seenIds = new Set<string>();
+  const defs: TerrainDef[] = [];
+
+  for (const [index, item] of input.entries()) {
+    if (!isPlainObject(item)) {
+      throw new Error(`parseTerrainDefs: 第 ${index} 個元素必須是物件，收到 ${JSON.stringify(item)}`);
+    }
+    rejectUnknownKeys(item, TERRAIN_DEF_KEYS, `parseTerrainDefs: 第 ${index} 個元素`);
+    const { id, name, walkable, buildable } = item;
+
+    if (!isNonEmptyString(id) || !validIds.has(id)) {
+      throw new Error(
+        `parseTerrainDefs: 第 ${index} 個元素的 id 必須是合法地形（${[...TERRAIN_TYPES].join('/')}），收到 ${JSON.stringify(id)}`,
+      );
+    }
+    if (!isNonEmptyString(name)) {
+      throw new Error(`parseTerrainDefs: 地形 "${id}" 的 name 必須是非空字串，收到 ${JSON.stringify(name)}`);
+    }
+    if (typeof walkable !== 'boolean') {
+      throw new Error(`parseTerrainDefs: 地形 "${id}" 的 walkable 必須是布林值，收到 ${JSON.stringify(walkable)}`);
+    }
+    if (typeof buildable !== 'boolean') {
+      throw new Error(`parseTerrainDefs: 地形 "${id}" 的 buildable 必須是布林值，收到 ${JSON.stringify(buildable)}`);
+    }
+    if (seenIds.has(id)) {
+      throw new Error(`parseTerrainDefs: id 重複 "${id}"`);
+    }
+    seenIds.add(id);
+
+    defs.push({ id, name, walkable, buildable });
   }
 
   return defs;

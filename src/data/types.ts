@@ -20,6 +20,16 @@ export interface BuildingDef {
   jobs: number;
 }
 
+/** 地形定義，對應 data\terrain.json。id 必須是 core\world\terrain.ts 的 TerrainType；
+ *  walkable/buildable 是給 UI 與工具查表用的資料鏡像，行為判斷仍以 isWalkable/isBuildable 為準
+ *  （tests\data\terrain-defs.test.ts 鎖定兩者必須一致，資料表改壞會當場紅）。 */
+export interface TerrainDef {
+  id: string;
+  name: string;
+  walkable: boolean;
+  buildable: boolean;
+}
+
 /** 人口數值常數表，對應 data\population.json。「Day」＝一個遊戲日（見 core\sim\time.ts）。 */
 export interface PopulationConfig {
   /** 每位居民每日消耗糧食（可為浮點） */
