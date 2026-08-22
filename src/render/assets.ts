@@ -26,7 +26,20 @@ export const GAME_TEXTURES: readonly TextureEntry[] = [
   { key: 'tavern-01', url: new URL('../../assets/game/tavern-01.png', import.meta.url).href },
   { key: 'wall-01', url: new URL('../../assets/game/wall-01.png', import.meta.url).href },
   { key: 'watchtower-01', url: new URL('../../assets/game/watchtower-01.png', import.meta.url).href },
+  { key: 'villager-01', url: new URL('../../assets/game/villager-01.png', import.meta.url).href },
+  { key: 'villager-02', url: new URL('../../assets/game/villager-02.png', import.meta.url).href },
 ];
+
+/** 居民 sprite key：依 citizen id 字元碼和決定性挑選（同一 id 永遠同一張圖，重繪也一致）。 */
+export const VILLAGER_TEXTURES = ['villager-01', 'villager-02'] as const;
+
+export function villagerTextureKey(citizenId: string): string {
+  let sum = 0;
+  for (let i = 0; i < citizenId.length; i++) {
+    sum += citizenId.charCodeAt(i);
+  }
+  return VILLAGER_TEXTURES[sum % VILLAGER_TEXTURES.length];
+}
 
 /**
  * 建築 type（data\buildings.json 的 id）→ sprite key。

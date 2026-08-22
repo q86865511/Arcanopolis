@@ -25,7 +25,9 @@
 - `npm run test`（vitest run）；`npm run typecheck`（tsc --noEmit）——宣稱完成前兩者都要實跑。
 - `npm run dev`（Vite dev server）；`npm run build`。
 - 快轉模擬器 CLI：`npm run simulate -- --seed 1 --ticks 3000 --sample-every 600 --buildings "lumber-camp:2,farm:1" [--out curve.csv]`
-  ——headless 跑 N ticks 輸出資源曲線 CSV（stdout 或 --out 檔案）；--buildings 省略時為空城（全 0 曲線）。
+  ——headless 跑 N ticks 輸出曲線 CSV（欄位 tick,totalDay,population,資源…）。預設為「滿編就業」
+  理想產能情境；加 `--full-sim` 走完整人口模擬（jobs+production+population+movement，人口從 0 成長，
+  可配 `--grid <n>` 地圖邊長與 `--population-config <path>` 覆寫平衡常數，兩者僅 --full-sim 下有效）。
 - 視覺驗證截圖：`npm run screenshot -- [--out path.png] [--wait ms] [--port n]`
   ——自起 vite（預設 5199）→ chromium 截圖 → 關閉；頁面無 canvas 或有 pageerror 時 exit 1。
   render 層改動收尾必跑一次產證據圖。

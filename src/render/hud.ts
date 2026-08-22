@@ -90,9 +90,10 @@ export class Hud {
 
   private formatResources(): string {
     // 在職率（employed/jobs）會讓每 tick 產量非整數（審查 F10）；顯示層取整，state 本身不動。
-    return RESOURCE_DEFS.map(
+    const resourceText = RESOURCE_DEFS.map(
       (def) => `${def.name} ${String(Math.floor(getResource(this.state, def.id))).padStart(5, ' ')}`,
     ).join('   ');
+    return `${resourceText}   人口 ${this.state.citizens.length}`;
   }
 
   private formatSelection(def: BuildingDef): string {

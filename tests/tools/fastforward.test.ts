@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { expandBuildingSpecs, parseArgs, runFastForward } from '../../src/tools/fastforward';
 import type { Building } from '../../src/core/world/state';
 import { parseBuildingDefs, parseResourceDefs } from '../../src/data/loader';
+import { TICKS_PER_DAY } from '../../src/core/sim/time';
 import resourcesJson from '../../data/resources.json';
 import buildingsJson from '../../data/buildings.json';
 
@@ -17,6 +18,11 @@ const lumberCampDef = buildingDefs.find((b) => b.id === 'lumber-camp')!;
 
 function lumberCampBuilding(): Building {
   return { id: 'lc-1', type: 'lumber-camp', x: 0, y: 0 };
+}
+
+/** house 無 jobs（housing:4），拿來對照 fullSim/非 fullSim 下 population 欄的不同語義 */
+function houseBuilding(): Building {
+  return { id: 'house-1', type: 'house', x: 0, y: 0 };
 }
 
 /** csv 資料列（不含 header）預期出現的 tick 值：0 起每 sampleEvery 一格＋最後一 tick 補列 */
@@ -117,6 +123,57 @@ describe('parseArgs（R1）', () => {
     ).toThrow(/buildings 總棟數上限/);
   });
 
+  it('--full-sim 為無值旗標 → 解析為 fullSim: true，省略時 fullSim 為 undefined', () => {
+    const withFlag = parseArgs(['--seed', '1', '--ticks', '100', '--sample-every', '10', '--full-sim']);
+    expect(withFlag.fullSim).toBe(true);
+
+    const withoutFlag = parseArgs(['--seed', '1', '--ticks', '100', '--sample-every', '10']);
+    expect(withoutFlag.fullSim).toBeUndefined();
+  });
+
+  it('--full-sim 可與其他有值參數混合出現在任意位置', () => {
+    const result = parseArgs([
+      '--full-sim', '--seed', '1', '--ticks', '100', '--sample-every', '10', '--grid', '20',
+    ]);
+    expect(result).toEqual({ seed: 1, ticks: 100, sampleEvery: 10, fullSim: true, grid: 20 });
+  });
+
+  it('--full-sim 重複 → throw', () => {
+    expect(() =>
+      parseArgs(['--seed', '1', '--ticks', '100', '--sample-every', '10', '--full-sim', '--full-sim']),
+    ).toThrow(/full-sim/);
+  });
+
+  it('--grid 解析為正整數；省略時欄位不存在；非正整數 → throw', () => {
+    const result = parseArgs(['--seed', '1', '--ticks', '100', '--sample-every', '10', '--full-sim', '--grid', '16']);
+    expect(result.grid).toBe(16);
+
+    const omitted = parseArgs(['--seed', '1', '--ticks', '100', '--sample-every', '10']);
+    expect(omitted.grid).toBeUndefined();
+
+    expect(() =>
+      parseArgs(['--seed', '1', '--ticks', '100', '--sample-every', '10', '--full-sim', '--grid', '0']),
+    ).toThrow(/grid/);
+    expect(() =>
+      parseArgs(['--seed', '1', '--ticks', '100', '--sample-every', '10', '--full-sim', '--grid', '-1']),
+    ).toThrow(/grid/);
+  });
+
+  it('--population-config 需搭配 --full-sim，否則 throw；搭配時解析為路徑字串', () => {
+    const result = parseArgs([
+      '--seed', '1', '--ticks', '100', '--sample-every', '10', '--full-sim',
+      '--population-config', 'my-config.json',
+    ]);
+    expect(result.populationConfigPath).toBe('my-config.json');
+
+    expect(() =>
+      parseArgs([
+        '--seed', '1', '--ticks', '100', '--sample-every', '10',
+        '--population-config', 'my-config.json',
+      ]),
+    ).toThrow(/full-sim/);
+  });
+
   it('expandBuildingSpecs 展開數量正確且未知 type → throw', () => {
     const buildings = expandBuildingSpecs([{ type: 'lumber-camp', count: 2 }, { type: 'farm', count: 1 }]);
     expect(buildings).toHaveLength(3);
@@ -127,10 +184,10 @@ describe('parseArgs（R1）', () => {
 });
 
 describe('runFastForward：CSV 格式（R2）', () => {
-  it('header 為 tick,totalDay, 接 resources.json 順序的資源 id', () => {
+  it('header 為 tick,totalDay,population, 接 resources.json 順序的資源 id', () => {
     const { csv } = runFastForward({ seed: 1, ticks: 30, sampleEvery: 10, buildings: [] });
     const [header] = csvLines(csv);
-    const expectedHeader = ['tick', 'totalDay', ...resourceDefs.map((r) => r.id)].join(',');
+    const expectedHeader = ['tick', 'totalDay', 'population', ...resourceDefs.map((r) => r.id)].join(',');
     expect(header).toBe(expectedHeader);
   });
 
@@ -221,5 +278,76 @@ describe('runFastForward：決定論（R4）', () => {
 
     expect(second.csv).toBe(first.csv);
     expect(second.finalState).toEqual(first.finalState);
+  });
+});
+
+describe('runFastForward：fullSim 分支（F5，M3-W3 審查裁決）', () => {
+  it('(a) fullSim 下 population 欄隨日成長；同建築非 fullSim 下 population 欄恆為工人數（house 無 jobs → 恆 0）', () => {
+    // house 只提供住房、無 jobs：非 fullSim 情境「population = 工人數」語義下應恆為 0，
+    // 與 fullSim 情境「population = citizens.length，從 0 隨日界成長」形成對照。
+    const fullSim = runFastForward({
+      seed: 1,
+      ticks: TICKS_PER_DAY,
+      sampleEvery: TICKS_PER_DAY,
+      buildings: [houseBuilding()],
+      fullSim: true,
+    });
+    const [, ...fullSimRows] = csvLines(fullSim.csv);
+    const fullSimPopulation = fullSimRows.map((row) => Number(row.split(',')[2]));
+    expect(fullSimPopulation).toEqual([0, 1]); // tick0：世界剛建立；tick600（首個日界）：糧食/住房皆足額，成長 1 人
+    expect(fullSim.finalState.citizens.length).toBe(1);
+
+    const notFullSim = runFastForward({
+      seed: 1,
+      ticks: TICKS_PER_DAY,
+      sampleEvery: TICKS_PER_DAY,
+      buildings: [houseBuilding()],
+    });
+    const [, ...notFullSimRows] = csvLines(notFullSim.csv);
+    const notFullSimPopulation = notFullSimRows.map((row) => Number(row.split(',')[2]));
+    expect(notFullSimPopulation).toEqual([0, 0]);
+  });
+
+  it('(b) populationConfig 覆寫生效：growthPerDay 調大 → 同 ticks 下人口成長更多', () => {
+    const base = runFastForward({
+      seed: 1,
+      ticks: TICKS_PER_DAY,
+      sampleEvery: TICKS_PER_DAY,
+      buildings: [houseBuilding()],
+      fullSim: true,
+    });
+
+    const overridden = runFastForward({
+      seed: 1,
+      ticks: TICKS_PER_DAY,
+      sampleEvery: TICKS_PER_DAY,
+      buildings: [houseBuilding()],
+      fullSim: true,
+      populationConfig: {
+        foodPerCitizenPerDay: 1,
+        growthPerDay: 3,
+        growthFoodReserveDays: 1,
+        starvationDeathsPerDay: 1,
+      },
+    });
+
+    expect(base.finalState.citizens.length).toBe(1);
+    expect(overridden.finalState.citizens.length).toBe(3); // min(growthPerDay=3, housing 4 空位) = 3
+    expect(overridden.finalState.citizens.length).not.toBe(base.finalState.citizens.length);
+  });
+
+  it('(c) fullSim 下起始資源正確出現在第一列（wood500/stone200/food100/gold100，即使 buildings 為空）', () => {
+    const { csv } = runFastForward({ seed: 1, ticks: 10, sampleEvery: 10, buildings: [], fullSim: true });
+    const [header, firstRow] = csvLines(csv);
+    const columns = header.split(',');
+    const fields = firstRow.split(',');
+    expect(fields[0]).toBe('0');
+
+    const expected: Record<string, number> = { wood: 500, stone: 200, food: 100, gold: 100 };
+    for (const [id, amount] of Object.entries(expected)) {
+      const idx = columns.indexOf(id);
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(Number(fields[idx])).toBe(amount);
+    }
   });
 });

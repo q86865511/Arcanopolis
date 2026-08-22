@@ -140,11 +140,13 @@ describe('R6：population 常數表（parsePopulationConfig）', () => {
   });
 
   it('data/population.json 經 parsePopulationConfig 驗證通過，值符合規格', () => {
+    // M3-W3 F0 平衡定案（C 組）：foodPerCitizenPerDay 100、growthFoodReserveDays 1，
+    // 見 .pipeline/reviews/2026-08-22-reviewer-m3w3.md
     const config: PopulationConfig = parsePopulationConfig(populationJson);
     expect(config).toEqual({
-      foodPerCitizenPerDay: 1,
+      foodPerCitizenPerDay: 100,
       growthPerDay: 1,
-      growthFoodReserveDays: 5,
+      growthFoodReserveDays: 1,
       starvationDeathsPerDay: 1,
     });
   });

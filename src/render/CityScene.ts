@@ -2,7 +2,7 @@
 // 職責僅止於「讀狀態 → 產生／更新 sprite」與攝影機操作，不持有遊戲規則，也不寫回 state。
 
 import Phaser from 'phaser';
-import { buildingTextureKey } from './assets';
+import { buildingTextureKey, villagerTextureKey } from './assets';
 import { BuildController } from './BuildController';
 import { CameraController } from './CameraController';
 import { buildingSize } from './defs';
@@ -20,7 +20,40 @@ import {
   terrainAnchor,
 } from './placement';
 import type { Simulation } from '../core/sim/simulation';
-import type { Building, GameState } from '../core/world/state';
+import type { Building, Citizen, GameState } from '../core/world/state';
+
+/** 居民 sprite 錨點原點：底邊中央，與建築一致。 */
+const CITIZEN_ORIGIN_X = 0.5;
+const CITIZEN_ORIGIN_Y = 1;
+/** 腳踩格心的微調：origin(0.5,1) 貼齊 tileCenter 會讓腳陷入地面，上移少許視覺才對齊。 */
+const CITIZEN_Y_OFFSET = -2;
+
+/**
+ * 個體視覺偏移的範圍（單位：像素）：同 home/job 的居民因 movement 決定論會走到同一格心，
+ * 不加偏移就會完全重合——玩家會把「疊在一起看不見」誤判成渲染壞掉（見 M3-W3 審查 F1）。
+ * 純顯示層微調，不影響 citizen.x/y 的模擬座標。
+ */
+const CITIZEN_OFFSET_X_RANGE = 4;
+const CITIZEN_OFFSET_Y_RANGE = 2;
+
+/**
+ * 依 citizen id 決定性算出視覺偏移：同一 id 永遠得到同一組偏移，重繪/重開都一致。
+ * 用 FNV-1a 而非簡單字元碼和——`citizen#<tick>-<seq>` 這類前綴固定的 id，字元碼和的分佈
+ * 幾乎只看數字位數奇偶，偏移會明顯偏斜（見 villagerTextureKey 的同類已知限制）。
+ */
+function citizenOffset(citizenId: string): { dx: number; dy: number } {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < citizenId.length; i++) {
+    hash ^= citizenId.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  hash >>>= 0;
+  const xBucket = CITIZEN_OFFSET_X_RANGE * 2 + 1;
+  const yBucket = CITIZEN_OFFSET_Y_RANGE * 2 + 1;
+  const dx = (hash % xBucket) - CITIZEN_OFFSET_X_RANGE;
+  const dy = (Math.floor(hash / xBucket) % yBucket) - CITIZEN_OFFSET_Y_RANGE;
+  return { dx, dy };
+}
 
 export const CITY_SCENE_KEY = 'city';
 
@@ -39,7 +72,9 @@ export class CityScene extends Phaser.Scene {
   /** 只渲染 HUD 的第二台攝影機（zoom 固定 1），見 hud.ts 開頭說明。 */
   private uiCamera!: Phaser.Cameras.Scene2D.Camera;
   private readonly buildingSprites = new Map<string, Phaser.GameObjects.Image>();
-  /** 已警告過素材缺漏的建築 type：缺素材的建築每 tick 都會重試建 sprite，警告只出一次 */
+  private readonly citizenSprites = new Map<string, Phaser.GameObjects.Image>();
+  /** 已警告過素材缺漏的 texture key（建築 type 或居民 texture key）：
+   *  缺素材的建築/居民每 tick 都會重試建 sprite，警告只出一次 */
   private readonly warnedMissingTextures = new Set<string>();
   private accumulator = 0;
 
@@ -53,6 +88,7 @@ export class CityScene extends Phaser.Scene {
     this.sim = world.sim;
     this.accumulator = 0;
     this.buildingSprites.clear();
+    this.citizenSprites.clear();
 
     // UI 攝影機要先建立：之後每個「世界」物件建立時都得叫它忽略，否則會被畫第二次
     this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height);
@@ -60,6 +96,7 @@ export class CityScene extends Phaser.Scene {
 
     this.drawTerrain();
     this.syncBuildings();
+    this.syncCitizens();
 
     this.camera = new CameraController(this);
     this.camera.attach();
@@ -105,9 +142,10 @@ export class CityScene extends Phaser.Scene {
       this.accumulator = SIM_TICK_MS * MAX_TICKS_PER_FRAME;
     }
 
-    // 建築清單與資源只會在 tick 中變動，沒跑 tick 就不必重算
+    // 建築清單、居民位置與資源只會在 tick 中變動，沒跑 tick 就不必重算
     if (ticks > 0) {
       this.syncBuildings();
+      this.syncCitizens();
       this.hud.refresh();
     }
     // 預覽每幀更新：滑鼠沒動但攝影機動了，hover 的格子也會變
@@ -176,5 +214,59 @@ export class CityScene extends Phaser.Scene {
       .setDepth(buildingDepth(building.x, building.y, size.w, size.h));
     this.uiCamera.ignore(sprite);
     return sprite;
+  }
+
+  /**
+   * 依 state.citizens 增刪並定位居民 sprite：與 syncBuildings 同法用 diff，
+   * 但居民每 tick 都會移動，故存活者的位置每次呼叫都要重算（不只新增/刪除時）。
+   */
+  private syncCitizens(): void {
+    const alive = new Set<string>();
+    for (const citizen of this.state.citizens) {
+      alive.add(citizen.id);
+      let sprite = this.citizenSprites.get(citizen.id);
+      if (sprite === undefined) {
+        const created = this.createCitizenSprite(citizen);
+        if (created !== null) {
+          this.citizenSprites.set(citizen.id, created);
+        }
+        sprite = created ?? undefined;
+      }
+      if (sprite !== undefined) {
+        this.positionCitizenSprite(sprite, citizen);
+      }
+    }
+    for (const [id, sprite] of this.citizenSprites) {
+      if (!alive.has(id)) {
+        sprite.destroy();
+        this.citizenSprites.delete(id);
+      }
+    }
+  }
+
+  private createCitizenSprite(citizen: Citizen): Phaser.GameObjects.Image | null {
+    const key = villagerTextureKey(citizen.id);
+    if (!this.textures.exists(key)) {
+      // 比照 createBuildingSprite：素材缺漏就跳過該居民而非讓整個場景炸掉，警告只出一次
+      if (!this.warnedMissingTextures.has(key)) {
+        this.warnedMissingTextures.add(key);
+        console.warn(`[CityScene] 找不到居民素材 "${key}"（居民 ${citizen.id}），略過不繪製`);
+      }
+      return null;
+    }
+    const sprite = this.add.image(0, 0, key).setOrigin(CITIZEN_ORIGIN_X, CITIZEN_ORIGIN_Y);
+    this.uiCamera.ignore(sprite);
+    return sprite;
+  }
+
+  /**
+   * 位置＝格心（浮點座標直接代入 tileCenter）疊加個體視覺偏移（見 citizenOffset），
+   * depth 壓在同格建築之上、下一列地物之下即可。
+   */
+  private positionCitizenSprite(sprite: Phaser.GameObjects.Image, citizen: Citizen): void {
+    const center = tileCenter(citizen.x, citizen.y);
+    const offset = citizenOffset(citizen.id);
+    sprite.setPosition(center.x + offset.dx, center.y + CITIZEN_Y_OFFSET + offset.dy);
+    sprite.setDepth(citizen.x + citizen.y + 0.5);
   }
 }
