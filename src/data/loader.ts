@@ -2,13 +2,7 @@
 // 失敗一律 throw（不回傳 null/預設值），讓資料表錯誤在載入當下就曝光，而不是流竄到模擬邏輯裡。
 
 import { TERRAIN_TYPES, type TerrainType } from '../core/world/terrain';
-import type {
-  BuildingDef,
-  PopulationConfig,
-  ResourceDef,
-  TerrainDef,
-  TerrainEconomy,
-} from './types';
+import type { BuildingDef, EconomyConfig, PopulationConfig, ResourceDef, TerrainDef, TerrainEconomy } from './types';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
@@ -35,7 +29,7 @@ function rejectUnknownKeys(item: Record<string, unknown>, allowedKeys: readonly 
   }
 }
 
-const RESOURCE_DEF_KEYS = ['id', 'name'] as const;
+const RESOURCE_DEF_KEYS = ['id', 'name', 'basePrice'] as const;
 const TERRAIN_DEF_KEYS = ['id', 'name', 'walkable', 'buildable'] as const;
 const BUILDING_DEF_KEYS = [
   'id',
@@ -47,10 +41,12 @@ const BUILDING_DEF_KEYS = [
   'housing',
   'jobs',
   'terrain',
+  'enablesTrade',
 ] as const;
 const BUILDING_SIZE_KEYS = ['w', 'h'] as const;
 const BUILDING_TERRAIN_KEYS = ['on', 'near', 'consumes'] as const;
 const TERRAIN_ECONOMY_KEYS = ['forestWoodCapacity', 'rockStoneCapacity', 'forestRegrowDays'] as const;
+const ECONOMY_CONFIG_KEYS = ['taxPerEmployedCitizenPerDay', 'marketBuyMarkup'] as const;
 const POPULATION_CONFIG_KEYS = [
   'foodPerCitizenPerDay',
   'growthPerDay',
@@ -200,7 +196,20 @@ export function parseResourceDefs(input: unknown): ResourceDef[] {
       throw new Error(`parseResourceDefs: id 重複 "${id}"`);
     }
     seenIds.add(id);
-    defs.push({ id, name });
+
+    // basePrice 省略＝不可交易（gold 即是），與「價格為 0」語義不同：後者會讓賣出恆得 0 金幣
+    // 卻仍扣光資源，因此 0 與負值一律視為資料錯誤。
+    const { basePrice } = item;
+    if (basePrice === undefined) {
+      defs.push({ id, name });
+      continue;
+    }
+    if (typeof basePrice !== 'number' || !Number.isFinite(basePrice) || basePrice <= 0) {
+      throw new Error(
+        `parseResourceDefs: 資源 "${id}" 的 basePrice 必須是正有限數值（或省略），收到 ${JSON.stringify(basePrice)}`,
+      );
+    }
+    defs.push({ id, name, basePrice });
   }
 
   return defs;
@@ -262,7 +271,7 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素必須是物件，收到 ${JSON.stringify(item)}`);
     }
     rejectUnknownKeys(item, BUILDING_DEF_KEYS, `parseBuildingDefs: 第 ${index} 個元素`);
-    const { id, name, size, cost, production, inputs, housing, jobs, terrain } = item;
+    const { id, name, size, cost, production, inputs, housing, jobs, terrain, enablesTrade } = item;
 
     if (!isNonEmptyString(id)) {
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素的 id 必須是非空字串，收到 ${JSON.stringify(id)}`);
@@ -285,6 +294,11 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
     const validHousing = validateCapacity(housing, 'housing', id);
     const validJobs = validateCapacity(jobs, 'jobs', id);
     const validTerrain = validateBuildingTerrain(terrain, id);
+    if (enablesTrade !== undefined && typeof enablesTrade !== 'boolean') {
+      throw new Error(
+        `parseBuildingDefs: 建築 "${id}" 的 enablesTrade 必須是布林值（或省略），收到 ${JSON.stringify(enablesTrade)}`,
+      );
+    }
 
     if (seenIds.has(id)) {
       throw new Error(`parseBuildingDefs: id 重複 "${id}"`);
@@ -301,6 +315,7 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       housing: validHousing,
       jobs: validJobs,
       ...(validTerrain === undefined ? {} : { terrain: validTerrain }),
+      ...(enablesTrade === true ? { enablesTrade: true } : {}),
     });
   }
 
@@ -348,6 +363,29 @@ export function parsePopulationConfig(input: unknown): PopulationConfig {
       'positiveInteger',
     ),
   };
+}
+
+export function parseEconomyConfig(input: unknown): EconomyConfig {
+  if (!isPlainObject(input)) {
+    throw new Error(`parseEconomyConfig: 輸入必須是物件，收到 ${JSON.stringify(input)}`);
+  }
+  rejectUnknownKeys(input, ECONOMY_CONFIG_KEYS, 'parseEconomyConfig');
+
+  const { taxPerEmployedCitizenPerDay, marketBuyMarkup } = input;
+  if (typeof taxPerEmployedCitizenPerDay !== 'number' || !Number.isFinite(taxPerEmployedCitizenPerDay) || taxPerEmployedCitizenPerDay < 0) {
+    throw new Error(
+      `parseEconomyConfig: taxPerEmployedCitizenPerDay 必須是非負有限數值，收到 ${JSON.stringify(taxPerEmployedCitizenPerDay)}`,
+    );
+  }
+  // 加價率允許 0（無手續費市場），但不得為負——負加價代表買價低於賣價，
+  // 玩家可以反覆買進再賣出無中生有造金幣。
+  if (typeof marketBuyMarkup !== 'number' || !Number.isFinite(marketBuyMarkup) || marketBuyMarkup < 0) {
+    throw new Error(
+      `parseEconomyConfig: marketBuyMarkup 必須是非負有限數值，收到 ${JSON.stringify(marketBuyMarkup)}`,
+    );
+  }
+
+  return { taxPerEmployedCitizenPerDay, marketBuyMarkup };
 }
 
 export function parseTerrainEconomy(input: unknown): TerrainEconomy {

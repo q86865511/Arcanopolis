@@ -7,6 +7,7 @@
 
 import Phaser from 'phaser';
 import { BUILDING_DEFS, RESOURCE_DEFS, resourceName } from './defs';
+import { buildingsOnPage, pageCount } from './buildingSelection';
 import { computeBarsLayout, fitFontSize } from './hudLayout';
 import { Minimap, type MinimapTile } from './Minimap';
 import { getResource, type GameState } from '../core/world/state';
@@ -33,13 +34,13 @@ const RESOURCE_FONT_SIZE = 15;
 const SELECTION_FONT_SIZE = 14;
 const MIN_FONT_SIZE = 8;
 
-/** 可用數字鍵選擇的建築數量上限（1..9、0，與 BuildController 的按鍵表一致）。 */
-const SELECTABLE_MAX = 10;
-
-function selectHint(): string {
-  const count = Math.min(BUILDING_DEFS.length, SELECTABLE_MAX);
-  const keys = count <= 9 ? `1-${count}` : '1-9 / 0';
-  return `按 ${keys} 選擇建築　左鍵放置 / 右鍵拆除`;
+function selectHint(page: number): string {
+  const onPage = buildingsOnPage(BUILDING_DEFS, page).length;
+  const keys = onPage <= 9 ? `1-${onPage}` : '1-9 / 0';
+  const total = pageCount(BUILDING_DEFS.length);
+  // 只有真的分頁時才提換頁鍵，建築表還沒滿一頁時不用多一段雜訊
+  const paging = total > 1 ? `（第 ${page + 1}/${total} 頁，[ ] 換頁）` : '';
+  return `按 ${keys} 選擇建築${paging}　左鍵放置 / 右鍵拆除`;
 }
 
 export class Hud {
@@ -70,7 +71,7 @@ export class Hud {
     });
     this.register(this.resourceText);
 
-    this.selectionText = this.scene.add.text(TEXT_PAD_X, 0, selectHint(), {
+    this.selectionText = this.scene.add.text(TEXT_PAD_X, 0, selectHint(0), {
       fontFamily: 'monospace',
       fontSize: '14px',
       color: TEXT_COLOR,
@@ -140,8 +141,8 @@ export class Hud {
     this.minimap.updateViewport(camera);
   }
 
-  setSelection(def: BuildingDef | null): void {
-    this.selectionText.setText(def === null ? selectHint() : this.formatSelection(def));
+  setSelection(def: BuildingDef | null, page = 0): void {
+    this.selectionText.setText(def === null ? selectHint(page) : this.formatSelection(def));
     this.fitTextToWidth();
   }
 

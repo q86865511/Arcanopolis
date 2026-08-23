@@ -10,6 +10,7 @@ import type { Simulation } from '../core/sim/simulation';
 import { getResource, type Building, type GameState } from '../core/world/state';
 import { canBuildAt } from '../core/world/buildable';
 import type { BuildingDef } from '../data/types';
+import { buildingsOnPage, wrapPage } from './buildingSelection';
 import { BUILDING_DEFS, buildingSize } from './defs';
 import { BOTTOM_BAR_H, TOP_BAR_H } from './hud';
 import { TILE_H, TILE_W, hitTile, tileCenter, type GridPoint } from './iso';
@@ -25,7 +26,7 @@ const PREVIEW_BLOCKED_COLOR = 0xd95763;
 const PREVIEW_FILL_ALPHA = 0.35;
 const PREVIEW_LINE_ALPHA = 0.9;
 
-/** 數字鍵 1..9、0 對應 BUILDING_DEFS 的前 10 項（依資料表順序）。 */
+/** 數字鍵 1..9、0 對應目前分頁上的 10 棟建築；超過 10 棟由 [ ] 換頁（見 buildingSelection.ts）。 */
 const SELECT_KEY_NAMES = [
   'ONE',
   'TWO',
@@ -45,6 +46,7 @@ const MOUSE_BUTTON_RIGHT = 2;
 export class BuildController {
   private preview!: Phaser.GameObjects.Graphics;
   private selected: BuildingDef | null = null;
+  private page = 0;
   private downX = 0;
   private downY = 0;
   /** 上一次畫出來的預覽長相；相同就不重畫，避免每幀重建 Graphics 指令 */
@@ -54,7 +56,7 @@ export class BuildController {
     private readonly scene: Phaser.Scene,
     private readonly state: GameState,
     private readonly sim: Simulation,
-    private readonly onSelectionChange: (def: BuildingDef | null) => void,
+    private readonly onSelectionChange: (def: BuildingDef | null, page: number) => void,
   ) {}
 
   attach(): void {
@@ -66,9 +68,15 @@ export class BuildController {
 
     const keyboard = input.keyboard;
     if (keyboard) {
-      BUILDING_DEFS.slice(0, SELECT_KEY_NAMES.length).forEach((def, index) => {
-        keyboard.on(`keydown-${SELECT_KEY_NAMES[index]}`, () => this.select(def));
+      // 綁定固定在 index 上、選取當下才查表：換頁不必重綁按鍵，也就不會殘留舊頁的 handler。
+      SELECT_KEY_NAMES.forEach((keyName, index) => {
+        keyboard.on(`keydown-${keyName}`, () => {
+          const def = buildingsOnPage(BUILDING_DEFS, this.page)[index];
+          if (def !== undefined) this.select(def);
+        });
       });
+      keyboard.on('keydown-OPEN_BRACKET', () => this.changePage(-1));
+      keyboard.on('keydown-CLOSED_BRACKET', () => this.changePage(1));
       keyboard.on('keydown-ESC', () => this.select(null));
     }
 
@@ -133,7 +141,17 @@ export class BuildController {
     }
     this.selected = def;
     this.previewSignature = '';
-    this.onSelectionChange(def);
+    this.onSelectionChange(def, this.page);
+  }
+
+  /** 換頁後一律取消選取：舊頁選中的建築留著會與畫面上的按鍵提示對不起來。 */
+  private changePage(delta: number): void {
+    const next = wrapPage(this.page + delta, BUILDING_DEFS.length);
+    if (next === this.page) return;
+    this.page = next;
+    this.selected = null;
+    this.previewSignature = '';
+    this.onSelectionChange(null, this.page);
   }
 
   private requestPlace(tile: GridPoint): void {

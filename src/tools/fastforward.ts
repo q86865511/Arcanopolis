@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import buildingsJson from '../../data/buildings.json';
+import economyJson from '../../data/economy.json';
 import populationJson from '../../data/population.json';
 import resourcesJson from '../../data/resources.json';
 import terrainEconomyJson from '../../data/terrain-economy.json';
@@ -13,6 +14,7 @@ import { createMovementSystem } from '../core/systems/movement';
 import { createPopulationSystem } from '../core/systems/population';
 import { createProductionSystem } from '../core/systems/production';
 import { createRegrowthSystem } from '../core/systems/regrowth';
+import { createTaxSystem } from '../core/systems/tax';
 import { canBuildAt } from '../core/world/buildable';
 import { applyStartingResources } from '../core/world/scenario';
 import {
@@ -22,7 +24,7 @@ import {
   type GameState,
 } from '../core/world/state';
 import type { PopulationConfig } from '../data/types';
-import { parseBuildingDefs, parsePopulationConfig, parseResourceDefs, parseTerrainEconomy } from '../data/loader';
+import { parseBuildingDefs, parseEconomyConfig, parsePopulationConfig, parseResourceDefs, parseTerrainEconomy } from '../data/loader';
 
 declare const process: {
   argv: string[];
@@ -211,6 +213,7 @@ function csvRow(state: GameState): string {
 }
 
 const defaultPopulationConfig = parsePopulationConfig(populationJson);
+const economyConfig = parseEconomyConfig(economyJson);
 
 function prioritizeFullSimEmployment(buildings: Building[]): Building[] {
   const inputOrder = new Map(buildings.map((building, index) => [building.id, index]));
@@ -277,6 +280,9 @@ export function runFastForward(options: FastForwardOptions): FastForwardResult {
       createJobsSystem(buildingDefs),
       createProductionSystem(buildingDefs, terrainEconomy),
       createPopulationSystem(buildingDefs, populationConfig),
+      // 稅收只掛在 fullSim：非 fullSim 是「理想產能」情境，憑空滿編且不模擬人口，
+      // 掛上去只會產出一條與就業無關的固定金幣直線，對平衡調校沒有意義。
+      createTaxSystem(economyConfig),
       createRegrowthSystem(terrainEconomy),
       createMovementSystem(buildingDefs, { w: grid, h: grid }),
     ];

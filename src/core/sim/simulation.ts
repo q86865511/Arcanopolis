@@ -1,6 +1,6 @@
 // 固定時步模擬迴圈。同 seed ＋同指令序列（相同 tick 時點 enqueue）必須產出相同的 state。
 
-import { applyCommand, validateCommand, type Command } from './commands';
+import { applyCommand, validateCommand, type Command, type TradeContext } from './commands';
 import { createRng } from './rng';
 import type { System } from './system';
 import { timeFromTick } from './time';
@@ -12,6 +12,8 @@ export class Simulation {
     private readonly state: GameState,
     private readonly systems: System[],
     private readonly defs: BuildingDef[] = [],
+    /** 省略時 trade 指令一律靜默跳過——headless 工具與既有測試不需要市場即可建構 Simulation。 */
+    private readonly trade?: TradeContext,
   ) {}
 
   /** 指令不立即生效，於下一次 tick 開頭依 FIFO 套用；非法指令在入口即拒收，保持批次套用原子
@@ -33,7 +35,7 @@ export class Simulation {
     // 先取出整批再清空：system 於本 tick 內 enqueue 的指令留到下一 tick。
     const batch = this.state.pendingCommands.splice(0, this.state.pendingCommands.length);
     for (const command of batch) {
-      applyCommand(this.state, command, this.defs);
+      applyCommand(this.state, command, this.defs, this.trade);
     }
 
     this.state.tick += 1;

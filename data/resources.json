@@ -1,12 +1,51 @@
 [
-  { "id": "wood", "name": "木材" },
-  { "id": "stone", "name": "石材" },
-  { "id": "food", "name": "糧食" },
-  { "id": "gold", "name": "金幣" },
-  { "id": "grain", "name": "穀物" },
-  { "id": "flour", "name": "麵粉" },
-  { "id": "plank", "name": "木板" },
-  { "id": "iron-ore", "name": "鐵礦" },
-  { "id": "iron", "name": "鐵錠" },
-  { "id": "tools", "name": "工具" }
+  {
+    "id": "wood",
+    "name": "木材",
+    "basePrice": 2
+  },
+  {
+    "id": "stone",
+    "name": "石材",
+    "basePrice": 3
+  },
+  {
+    "id": "food",
+    "name": "糧食",
+    "basePrice": 3
+  },
+  {
+    "id": "gold",
+    "name": "金幣"
+  },
+  {
+    "id": "grain",
+    "name": "穀物",
+    "basePrice": 2
+  },
+  {
+    "id": "flour",
+    "name": "麵粉",
+    "basePrice": 5
+  },
+  {
+    "id": "plank",
+    "name": "木板",
+    "basePrice": 6
+  },
+  {
+    "id": "iron-ore",
+    "name": "鐵礦",
+    "basePrice": 5
+  },
+  {
+    "id": "iron",
+    "name": "鐵錠",
+    "basePrice": 12
+  },
+  {
+    "id": "tools",
+    "name": "工具",
+    "basePrice": 30
+  }
 ]

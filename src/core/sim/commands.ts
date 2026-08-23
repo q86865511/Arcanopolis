@@ -3,7 +3,7 @@
 import { addResource, getResource, type GameState } from '../world/state';
 import { footprintTiles, isAreaFree } from '../world/occupancy';
 import { canBuildAt } from '../world/buildable';
-import type { BuildingDef } from '../../data/types';
+import type { BuildingDef, EconomyConfig, ResourceDef } from '../../data/types';
 
 export interface AddResourceCommand {
   type: 'addResource';
@@ -24,7 +24,23 @@ export interface RemoveBuildingCommand {
   buildingId: string;
 }
 
-export type Command = AddResourceCommand | PlaceBuildingCommand | RemoveBuildingCommand;
+export interface TradeCommand {
+  type: 'trade';
+  /** buy＝付金幣換資源；sell＝交資源換金幣 */
+  direction: 'buy' | 'sell';
+  resource: string;
+  /** 交易單位數，正整數 */
+  amount: number;
+}
+
+export type Command = AddResourceCommand | PlaceBuildingCommand | RemoveBuildingCommand | TradeCommand;
+
+/** 交易所需的市場環境：定價來自資源表、加價率來自經濟表。
+ *  未注入時 trade 指令一律靜默跳過（比照 placeBuilding 未注入 defs 的處理）。 */
+export interface TradeContext {
+  resourceDefs: ResourceDef[];
+  economy: EconomyConfig;
+}
 
 /** 於 enqueue 入口與存檔還原時呼叫：輸入可能來自不受信任的 JSON，逐欄驗證、未知 type 一律拒絕 */
 // 長度/數值上限：指令可能來自不受信任的 JSON（存檔還原、未來連線輸入），沒有上限會讓
@@ -33,6 +49,7 @@ const MAX_BUILDING_TYPE_LENGTH = 64;
 const MAX_BUILDING_ID_LENGTH = 128;
 const MAX_RESOURCE_ID_LENGTH = 64;
 const MAX_COORDINATE_ABS = 1_000_000;
+const MAX_TRADE_AMOUNT = 1_000_000;
 
 export function validateCommand(command: Command): void {
   if (typeof command !== 'object' || command === null) {
@@ -74,6 +91,24 @@ export function validateCommand(command: Command): void {
         throw new Error(`placeBuilding: y 絕對值不可超過 ${MAX_COORDINATE_ABS}，收到 ${command.y}`);
       }
       break;
+    case 'trade':
+      if (command.direction !== 'buy' && command.direction !== 'sell') {
+        throw new Error(`trade: direction 必須是 "buy" 或 "sell"，收到 ${JSON.stringify(command.direction)}`);
+      }
+      if (typeof command.resource !== 'string' || command.resource.length === 0) {
+        throw new Error(`trade: resource 必須是非空字串，收到 ${JSON.stringify(command.resource)}`);
+      }
+      if (command.resource.length > MAX_RESOURCE_ID_LENGTH) {
+        throw new Error(`trade: resource 長度不可超過 ${MAX_RESOURCE_ID_LENGTH}，收到長度 ${command.resource.length}`);
+      }
+      // 交易量限正整數：小數會讓資源與金幣同時出現浮點殘渣，且「買 0.5 個工具」沒有語義。
+      if (!Number.isInteger(command.amount) || command.amount <= 0) {
+        throw new Error(`trade: amount 必須是正整數，收到 ${JSON.stringify(command.amount)}`);
+      }
+      if (command.amount > MAX_TRADE_AMOUNT) {
+        throw new Error(`trade: amount 不可超過 ${MAX_TRADE_AMOUNT}，收到 ${command.amount}`);
+      }
+      break;
     case 'removeBuilding':
       if (typeof command.buildingId !== 'string' || command.buildingId.length === 0) {
         throw new Error(`removeBuilding: buildingId 必須是非空字串，收到 ${JSON.stringify(command.buildingId)}`);
@@ -92,7 +127,12 @@ export function validateCommand(command: Command): void {
 }
 
 /** defs 缺省為空陣列：呼叫端未注入建築定義時，placeBuilding 一律因查無 def 靜默跳過（見 Simulation 兩參數呼叫）*/
-export function applyCommand(state: GameState, command: Command, defs: BuildingDef[] = []): void {
+export function applyCommand(
+  state: GameState,
+  command: Command,
+  defs: BuildingDef[] = [],
+  trade?: TradeContext,
+): void {
   switch (command.type) {
     case 'addResource':
       addResource(state, command.resource, command.amount);
@@ -122,6 +162,34 @@ export function applyCommand(state: GameState, command: Command, defs: BuildingD
         x: command.x,
         y: command.y,
       });
+      break;
+    }
+    case 'trade': {
+      if (trade === undefined) break; // 未注入市場環境 → 靜默跳過
+
+      // 必須先有一棟已完工、宣告 enablesTrade 的建築，交易能力才解鎖。
+      const hasMarket = state.buildings.some(
+        (b) => defs.find((d) => d.id === b.type)?.enablesTrade === true,
+      );
+      if (!hasMarket) break;
+
+      const def = trade.resourceDefs.find((d) => d.id === command.resource);
+      // basePrice 省略＝該資源不可交易（gold 自身即是）→ 靜默跳過，避免用金幣買金幣
+      if (def?.basePrice === undefined) break;
+
+      if (command.direction === 'sell') {
+        // 庫存不足不做部分成交：與 placeBuilding 的「整筆跳過、不部分扣款」一致。
+        if (getResource(state, command.resource) < command.amount) break;
+        addResource(state, command.resource, -command.amount);
+        addResource(state, 'gold', def.basePrice * command.amount);
+        break;
+      }
+
+      const unitPrice = def.basePrice * (1 + trade.economy.marketBuyMarkup);
+      const totalPrice = unitPrice * command.amount;
+      if (getResource(state, 'gold') < totalPrice) break;
+      addResource(state, 'gold', -totalPrice);
+      addResource(state, command.resource, command.amount);
       break;
     }
     case 'removeBuilding': {

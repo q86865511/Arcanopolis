@@ -6,6 +6,8 @@ import type { TerrainType } from '../core/world/terrain';
 export interface ResourceDef {
   id: string;
   name: string;
+  /** 市場基準單價（金幣/單位）。省略代表不可交易——gold 自身即為此類。 */
+  basePrice?: number;
 }
 
 export interface BuildingDef {
@@ -22,6 +24,8 @@ export interface BuildingDef {
   housing: number;
   /** 可提供工作數；資料表省略時由 loader 正規化為 0 */
   jobs: number;
+  /** 為真代表該建築完工後解鎖市場交易（trade 指令）；省略等同 false */
+  enablesTrade?: boolean;
   /** 地形規則：on/near 僅限制擺放；consumes 宣告生產時可消耗的地形資源。 */
   terrain?: {
     on?: TerrainType[];
@@ -50,6 +54,15 @@ export interface PopulationConfig {
   growthFoodReserveDays: number;
   /** 糧食耗盡時每日餓死居民數 */
   starvationDeathsPerDay: number;
+}
+
+/** 經濟常數表，對應 data\economy.json。「Day」＝一個遊戲日（見 core\sim\time.ts）。 */
+export interface EconomyConfig {
+  /** 每位「有工作」的居民每日繳納的金幣；無業居民不繳稅 */
+  taxPerEmployedCitizenPerDay: number;
+  /** 市場買入加價率：買價 = basePrice × (1 + marketBuyMarkup)，賣價 = basePrice。
+   *  這段價差就是市場的手續費，讓「賣掉再買回」必定虧損，杜絕零成本套利。 */
+  marketBuyMarkup: number;
 }
 
 /** 地形資源與森林再生常數，對應 data\terrain-economy.json。 */

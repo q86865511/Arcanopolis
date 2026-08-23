@@ -48,8 +48,8 @@ describe('data/resources.json 擴充加工鏈資源（R3）', () => {
 // ── R4：建築表擴充 ────────────────────────────────────────────────────────────
 
 describe('data/buildings.json 擴充加工鏈建築（R4）', () => {
-  it('經 parseBuildingDefs 驗證通過，共 10 棟', () => {
-    expect(realDefs()).toHaveLength(10);
+  it('經 parseBuildingDefs 驗證通過，共 11 棟（W1 十棟＋W2 市場）', () => {
+    expect(realDefs()).toHaveLength(11);
   });
 
   it('farm 改為產出 grain 4（原 food 3），jobs/cost/terrain 不變', () => {

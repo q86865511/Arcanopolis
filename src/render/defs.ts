@@ -5,12 +5,15 @@
 import buildingsJson from '../../data/buildings.json';
 import resourcesJson from '../../data/resources.json';
 import terrainEconomyJson from '../../data/terrain-economy.json';
-import { parseBuildingDefs, parseResourceDefs, parseTerrainEconomy } from '../data/loader';
+import economyJson from '../../data/economy.json';
+import { parseBuildingDefs, parseEconomyConfig, parseResourceDefs, parseTerrainEconomy } from '../data/loader';
 import type { BuildingDef } from '../data/types';
 
 export const RESOURCE_DEFS = parseResourceDefs(resourcesJson);
 
 export const TERRAIN_ECONOMY = parseTerrainEconomy(terrainEconomyJson);
+
+export const ECONOMY_CONFIG = parseEconomyConfig(economyJson);
 
 export const BUILDING_DEFS = parseBuildingDefs(
   buildingsJson,

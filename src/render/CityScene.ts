@@ -156,7 +156,7 @@ export class CityScene extends Phaser.Scene {
     this.hud.updateViewport(this.cameras.main);
     this.cameras.main.ignore(this.hud.displayObjects);
 
-    this.build = new BuildController(this, this.state, this.sim, (def) => this.hud.setSelection(def));
+    this.build = new BuildController(this, this.state, this.sim, (def, page) => this.hud.setSelection(def, page));
     this.build.attach();
     this.uiCamera.ignore(this.build.displayObjects);
 

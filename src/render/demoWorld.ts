@@ -6,10 +6,11 @@ import { createMovementSystem } from '../core/systems/movement';
 import { createPopulationSystem } from '../core/systems/population';
 import { createProductionSystem } from '../core/systems/production';
 import { createRegrowthSystem } from '../core/systems/regrowth';
+import { createTaxSystem } from '../core/systems/tax';
 import { canBuildAt } from '../core/world/buildable';
 import { applyStartingResources } from '../core/world/scenario';
 import { createInitialState, type Building, type Citizen, type GameState } from '../core/world/state';
-import { BUILDING_DEFS, RESOURCE_DEFS, TERRAIN_ECONOMY } from './defs';
+import { BUILDING_DEFS, ECONOMY_CONFIG, RESOURCE_DEFS, TERRAIN_ECONOMY } from './defs';
 
 const DEMO_SEED = 1;
 
@@ -112,10 +113,13 @@ export function createDemoWorld(worldSize?: number): DemoWorld {
       createJobsSystem(BUILDING_DEFS),
       createProductionSystem(BUILDING_DEFS, TERRAIN_ECONOMY),
       createPopulationSystem(BUILDING_DEFS, POPULATION_CONFIG),
+      // 稅收排在人口之後：同一日界先結算餓死/成長，再依「結算後」的就業人數課稅。
+      createTaxSystem(ECONOMY_CONFIG),
       createRegrowthSystem(TERRAIN_ECONOMY),
       createMovementSystem(BUILDING_DEFS, { w: state.worldSize, h: state.worldSize }),
     ],
     BUILDING_DEFS,
+    { resourceDefs: RESOURCE_DEFS, economy: ECONOMY_CONFIG },
   );
 
   return {
