@@ -30,6 +30,29 @@ assets/       raw 生圖原始檔 / game 遊戲用素材 / refs 生圖參考
 docs/         art-bible.md 等設計文件
 ```
 
+## 快速開始
+
+```bash
+npm install
+npm run dev        # Vite dev server（預設 http://localhost:5173）
+```
+
+其他指令：`npm run test`（Vitest）、`npm run typecheck`（tsc --noEmit）、`npm run build`。
+
+數值平衡用的 headless 快轉模擬器：
+
+```bash
+npm run simulate -- --seed 1 --ticks 3000 --sample-every 600 --buildings "farm:2,mill:1,bakery:1"
+```
+
+操作：數字鍵 `1`-`9` 與 `0` 選擇建築，左鍵放置、右鍵拆除，`Esc` 取消選取。
+
 ## 開發狀態
 
-進行中（M0 bootstrap）。進度見 [PROGRESS.md](PROGRESS.md)。
+開發中，目前進度 **M4-W1（生產鏈與加工鏈）**：10 種資源、10 棟建築，
+三段食物鏈（農場→磨坊→麵包坊）與金屬鏈（礦坑→冶煉廠→鐵匠鋪）已可運轉，
+跑在程序生成的島嶼地形上。塔防、冒險者公會、魔法與多種族尚未實作。
+詳細進度與已知問題見 [PROGRESS.md](PROGRESS.md)。
+
+> 注意：M4-W1 新增的六棟建築（磨坊、麵包坊、鋸木廠、礦坑、冶煉廠、鐵匠鋪）
+> 尚無美術素材，模擬正常但畫面上不會顯示——素材批排在 M4-W3。
