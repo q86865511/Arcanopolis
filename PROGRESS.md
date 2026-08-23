@@ -176,14 +176,13 @@
 
 ## 已知問題
 
-- [2026-08-23，未定位] **頁面在「隱藏分頁」狀態載入時開機即崩**：canvas 停在 0×0，
-  Phaser 拋 `Framebuffer status: Incomplete Attachment`，之後手動觸發 resize 也救不回來
-  （渲染器已在 boot 時死亡）。此時 `#app` 本身有正常 1280×720 版面，是 canvas 沒被撐開。
-  目前只在 Claude 內建瀏覽器分頁（`document.hidden` 恆為 true）重現；
-  headless chromium 1280×720 前景載入完全正常（見 M4-W1 驗收截圖）。
-  **尚未確認一般 Chrome 背景分頁是否同樣中招**——若會，代表使用者用 Ctrl+click
-  或還原工作階段開啟遊戲就會白畫面。需驗證後再決定修法（延後 boot 到 visible，
-  或給 Phaser 明確初始尺寸）。
+（無）
+
+已排除的疑似問題：
+- [2026-08-23 結案] 「隱藏分頁載入開機即崩」（canvas 0×0＋`Framebuffer status: Incomplete
+  Attachment`）**是假性 bug，僅限 Claude 內建瀏覽器**（該環境 `document.hidden` 恆為 true）。
+  使用者實測一般 Chrome 開啟正常，headless chromium 亦正常。不需修改 boot 流程。
+  日後若在內建瀏覽器再看到此錯誤，直接視為環境限制，改用 `npm run screenshot` 取證。
 
 ## 重要決策紀錄
 
