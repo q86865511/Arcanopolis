@@ -52,6 +52,7 @@ const POPULATION_CONFIG_KEYS = [
   'growthPerDay',
   'growthFoodReserveDays',
   'starvationDeathsPerDay',
+  'maxCommuteDistance',
 ] as const;
 
 /** 單棟建築的 housing/jobs 上限：同理擋資料表打錯撐爆人口計算 */
@@ -360,6 +361,11 @@ export function parsePopulationConfig(input: unknown): PopulationConfig {
     starvationDeathsPerDay: validatePopulationField(
       input.starvationDeathsPerDay,
       'starvationDeathsPerDay',
+      'positiveInteger',
+    ),
+    maxCommuteDistance: validatePopulationField(
+      input.maxCommuteDistance,
+      'maxCommuteDistance',
       'positiveInteger',
     ),
   };

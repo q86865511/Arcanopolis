@@ -11,8 +11,8 @@
 // - 決選規則：在所有「有空缺」的建築中選 Manhattan 距離最小者；距離相同時取 buildings 陣列中
 //   較早出現者（與現行「依 buildings 陣列序找第一個有空缺者」的既有慣例一致，只是先過濾/排序
 //   改為「先比距離、同距離才比陣列序」）。
-// - API 形狀不變：createJobsSystem(defs: BuildingDef[]): System——距離所需的座標本就在
-//   Building.x/y 與 citizen.home 可查得的 home 建築上，不需要新增參數。
+// - createJobsSystem(defs, maxCommuteDistance): System——距離所需的座標本就在 Building.x/y
+//   與 citizen.home 可查得的 home 建築上，不需要改動 state schema。
 //
 // 本檔同時補回歸覆蓋（R3(d)）：既有 jobs 行為（job 懸空重設 null、home 懸空移除 citizen、
 // 建築容量調降的超額釋放）在距離感知版本下仍必須成立——與 tests/core/jobs-system.test.ts

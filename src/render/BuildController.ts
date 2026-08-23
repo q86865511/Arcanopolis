@@ -11,8 +11,9 @@ import { getResource, type Building, type GameState } from '../core/world/state'
 import { canBuildAt } from '../core/world/buildable';
 import type { BuildingDef } from '../data/types';
 import { buildingsOnPage, wrapPage } from './buildingSelection';
+import { demolitionWarning } from './demolition';
 import { BUILDING_DEFS, buildingSize } from './defs';
-import { BOTTOM_BAR_H, TOP_BAR_H } from './hud';
+import { TOP_BAR_H, bottomBarHeight } from './hud';
 import { TILE_H, TILE_W, hitTile, tileCenter, type GridPoint } from './iso';
 
 /** 壓在建築之上、HUD 之下：預覽要看得見，但不能蓋掉資源數值。 */
@@ -47,6 +48,8 @@ export class BuildController {
   private preview!: Phaser.GameObjects.Graphics;
   private selected: BuildingDef | null = null;
   private page = 0;
+  /** 已提出警告、等待第二次右鍵確認的建築 id；換選建築或按 Esc 都會清掉。 */
+  private pendingRemoveId: string | null = null;
   private downX = 0;
   private downY = 0;
   /** 上一次畫出來的預覽長相；相同就不重畫，避免每幀重建 Graphics 指令 */
@@ -57,7 +60,16 @@ export class BuildController {
     private readonly state: GameState,
     private readonly sim: Simulation,
     private readonly onSelectionChange: (def: BuildingDef | null, page: number) => void,
+    /** HUD 先吃點擊：回 true 代表這一下已被選單格子處理，不再當成世界上的放置/拆除。 */
+    private readonly onHudPointer: (x: number, y: number) => boolean = () => false,
+    /** 顯示/清除下列的警告訊息；null 代表回到平常的說明文字。 */
+    private readonly onNotice: (message: string | null) => void = () => {},
   ) {}
+
+  /** 供 HUD 的建築選單格子呼叫（點格子＝選建築）。 */
+  selectDef(def: BuildingDef | null): void {
+    this.select(def);
+  }
 
   attach(): void {
     this.preview = this.scene.add.graphics().setDepth(PREVIEW_DEPTH);
@@ -90,7 +102,11 @@ export class BuildController {
       if (Phaser.Math.Distance.Between(this.downX, this.downY, pointer.x, pointer.y) >= CLICK_SLOP_PX) {
         return;
       }
-      // 游標壓在上/下資訊列上：那是 HUD 文字，底下的世界格子不該被點擊觸發
+      // 建築選單的格子就長在下列上，得比 isOverHud 更早判定，否則點格子會被整條列的死區吃掉
+      if (pointer.button === MOUSE_BUTTON_LEFT && this.onHudPointer(pointer.x, pointer.y)) {
+        return;
+      }
+      // 游標壓在上/下資訊列上：那是 HUD，底下的世界格子不該被點擊觸發
       if (this.isOverHud(pointer)) {
         return;
       }
@@ -136,6 +152,7 @@ export class BuildController {
   }
 
   private select(def: BuildingDef | null): void {
+    this.clearPendingRemove();
     if (def === this.selected) {
       return;
     }
@@ -148,6 +165,7 @@ export class BuildController {
   private changePage(delta: number): void {
     const next = wrapPage(this.page + delta, BUILDING_DEFS.length);
     if (next === this.page) return;
+    this.clearPendingRemove();
     this.page = next;
     this.selected = null;
     this.previewSignature = '';
@@ -170,9 +188,32 @@ export class BuildController {
   private requestRemove(tile: GridPoint): void {
     const target = this.buildingAt(tile.gx, tile.gy);
     if (target === undefined) {
+      // 點空地也要清掉待確認狀態：否則玩家點開別處再回來按一次右鍵就會直接拆掉，
+      // 那次點擊在他的認知裡是「第一次」。
+      this.clearPendingRemove();
       return;
     }
-    this.sim.enqueue({ type: 'removeBuilding', buildingId: target.id });
+    if (this.pendingRemoveId === target.id) {
+      this.clearPendingRemove();
+      this.sim.enqueue({ type: 'removeBuilding', buildingId: target.id });
+      return;
+    }
+
+    const def = BUILDING_DEFS.find((candidate) => candidate.id === target.type);
+    const warning = demolitionWarning(this.state, target, def);
+    if (warning === null) {
+      this.clearPendingRemove();
+      this.sim.enqueue({ type: 'removeBuilding', buildingId: target.id });
+      return;
+    }
+    this.pendingRemoveId = target.id;
+    this.onNotice(warning);
+  }
+
+  private clearPendingRemove(): void {
+    if (this.pendingRemoveId === null) return;
+    this.pendingRemoveId = null;
+    this.onNotice(null);
   }
 
   /** 游標是否壓在上/下 HUD 資訊列：pointer.x/y 是畫面座標（HUD 用 setScrollFactor(0) 固定於畫面），
@@ -184,10 +225,11 @@ export class BuildController {
    *  寧可極矮視窗下誤觸世界格子，也不要讓玩家完全點不動。 */
   private isOverHud(pointer: Phaser.Input.Pointer): boolean {
     const height = this.scene.scale.height;
-    if (height <= TOP_BAR_H + BOTTOM_BAR_H) {
+    const bottomH = bottomBarHeight(this.scene.scale.width);
+    if (height <= TOP_BAR_H + bottomH) {
       return false;
     }
-    return pointer.y < TOP_BAR_H || pointer.y > height - BOTTOM_BAR_H;
+    return pointer.y < TOP_BAR_H || pointer.y > height - bottomH;
   }
 
   /** 滑鼠位置 → 格座標。範圍外也回傳，讓 canBuildAt 判 false 並保留紅色預覽。 */

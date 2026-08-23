@@ -2,5 +2,6 @@
   "foodPerCitizenPerDay": 100,
   "growthPerDay": 1,
   "growthFoodReserveDays": 1,
-  "starvationDeathsPerDay": 1
+  "starvationDeathsPerDay": 1,
+  "maxCommuteDistance": 24
 }

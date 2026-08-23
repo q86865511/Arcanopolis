@@ -5,7 +5,10 @@ import type { BuildingDef } from '../../data/types';
 import type { GameState } from '../world/state';
 import type { System, SimContext } from '../sim/system';
 
-export function createJobsSystem(defs: BuildingDef[]): System {
+export function createJobsSystem(
+  defs: BuildingDef[],
+  maxCommuteDistance: number = 24,
+): System {
   const defsByType = new Map<string, BuildingDef>(defs.map((def) => [def.id, def]));
 
   return {
@@ -56,6 +59,7 @@ export function createJobsSystem(defs: BuildingDef[]): System {
           if (current >= capacity) continue;
           // 這是直線 Manhattan 估算，不考慮障礙；實際可達性由 movement 的有界搜尋負責。
           const distance = Math.abs(home.x - building.x) + Math.abs(home.y - building.y);
+          if (distance > maxCommuteDistance) continue;
           if (distance >= nearestDistance) continue;
           nearestBuildingId = building.id;
           nearestDistance = distance;

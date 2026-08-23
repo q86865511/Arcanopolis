@@ -52,6 +52,7 @@ function makeConfig(overrides: Partial<PopulationConfig> = {}): PopulationConfig
     growthPerDay: 2,
     growthFoodReserveDays: 3,
     starvationDeathsPerDay: 1,
+    maxCommuteDistance: 24,
     ...overrides,
   };
 }

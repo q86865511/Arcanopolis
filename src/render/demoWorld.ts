@@ -110,7 +110,7 @@ export function createDemoWorld(worldSize?: number): DemoWorld {
   const sim = new Simulation(
     state,
     [
-      createJobsSystem(BUILDING_DEFS),
+      createJobsSystem(BUILDING_DEFS, POPULATION_CONFIG.maxCommuteDistance),
       createProductionSystem(BUILDING_DEFS, TERRAIN_ECONOMY),
       createPopulationSystem(BUILDING_DEFS, POPULATION_CONFIG),
       // 稅收排在人口之後：同一日界先結算餓死/成長，再依「結算後」的就業人數課稅。

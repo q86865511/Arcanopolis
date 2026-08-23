@@ -277,7 +277,7 @@ export function runFastForward(options: FastForwardOptions): FastForwardResult {
       : prioritizeFullSimEmployment(placedBuildings);
     const populationConfig = options.populationConfig ?? defaultPopulationConfig;
     systems = [
-      createJobsSystem(buildingDefs),
+      createJobsSystem(buildingDefs, populationConfig.maxCommuteDistance),
       createProductionSystem(buildingDefs, terrainEconomy),
       createPopulationSystem(buildingDefs, populationConfig),
       // 稅收只掛在 fullSim：非 fullSim 是「理想產能」情境，憑空滿編且不模擬人口，

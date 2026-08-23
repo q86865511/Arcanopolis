@@ -328,6 +328,7 @@ describe('runFastForward：fullSim 分支（F5，M3-W3 審查裁決）', () => {
         growthPerDay: 3,
         growthFoodReserveDays: 1,
         starvationDeathsPerDay: 1,
+        maxCommuteDistance: 24,
       },
     });
 

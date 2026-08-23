@@ -8,6 +8,7 @@ import { CameraController } from './CameraController';
 import { computeCameraBounds } from './cameraBounds';
 import { buildingSize } from './defs';
 import { createDemoWorld } from './demoWorld';
+import { changeSpeed, speedMultiplier, togglePause, INITIAL_SPEED, type GameSpeed } from './gameSpeed';
 import { Hud } from './hud';
 import { TILE_H, TILE_W, gridToScreen, tileCenter } from './iso';
 import { TerrainRenderer, type TerrainRenderMetrics } from './TerrainRenderer';
@@ -103,6 +104,7 @@ export class CityScene extends Phaser.Scene {
    */
   private terrainOverrideTypes = new Map<string, string>();
   private accumulator = 0;
+  private speed: GameSpeed = INITIAL_SPEED;
 
   constructor() {
     super(CITY_SCENE_KEY);
@@ -151,14 +153,25 @@ export class CityScene extends Phaser.Scene {
     this.syncBuildings();
     this.syncCitizens();
 
-    this.hud = new Hud(this, this.state);
+    // onPick 在點擊當下才解參考 this.build——Hud 先建立（BuildController 的 HUD 死區要問它列高），
+    // 但格子被點到必定晚於兩者都建好。
+    this.hud = new Hud(this, this.state, this.sim, (def) => this.build.selectDef(def));
     this.hud.create();
     this.hud.updateViewport(this.cameras.main);
     this.cameras.main.ignore(this.hud.displayObjects);
 
-    this.build = new BuildController(this, this.state, this.sim, (def, page) => this.hud.setSelection(def, page));
+    this.build = new BuildController(
+      this,
+      this.state,
+      this.sim,
+      (def, page) => this.hud.setSelection(def, page),
+      (x, y) => this.hud.handlePalettePointer(x, y),
+      (message) => this.hud.setNotice(message),
+    );
     this.build.attach();
     this.uiCamera.ignore(this.build.displayObjects);
+
+    this.attachSpeedKeys();
 
     // 視窗大小會變（Scale.RESIZE）：監聽要在場景關閉時解掉，否則場景重啟會疊上第二個
     // 監聽器，而舊監聽器持有的是已被銷毀的 hud/uiCamera。
@@ -216,13 +229,37 @@ export class CityScene extends Phaser.Scene {
     this.camera.setWorldBounds(target.x, target.y, target.w, target.h);
   }
 
+  /** 速度鍵獨立於 BuildController：數字鍵已被建築選單佔滿，這裡用空白鍵與 - = 一組。 */
+  private attachSpeedKeys(): void {
+    const keyboard = this.input.keyboard;
+    if (!keyboard) return;
+    const apply = (next: GameSpeed): void => {
+      this.speed = next;
+      this.hud.setSpeed(next);
+    };
+    keyboard.on('keydown-SPACE', () => apply(togglePause(this.speed)));
+    keyboard.on('keydown-M', () => {
+      if (!this.hud.toggleMarket()) {
+        this.hud.setNotice('還沒有市場——先蓋一座市場才能交易');
+      }
+    });
+    // Esc 已被 BuildController 用來取消選取；市場開著時它優先關面板，符合「Esc 收掉最上層」的直覺
+    keyboard.on('keydown-ESC', () => {
+      if (this.hud.marketOpen) this.hud.closeMarket();
+    });
+    keyboard.on('keydown-MINUS', () => apply(changeSpeed(this.speed, -1)));
+    keyboard.on('keydown-EQUALS', () => apply(changeSpeed(this.speed, 1)));
+  }
+
   update(_time: number, deltaMs: number): void {
     // 滾輪縮放會改變可視範圍，而 CameraController 不知道世界邊界；每幀對一次簽章即可
     this.applyCameraBounds();
 
     let ticks = 0;
     const terrainChanges = new Map<string, { x: number; y: number }>();
-    this.accumulator += deltaMs;
+    // 倍率直接乘在累積的實時毫秒上：模擬本身仍是固定時步（SIM_TICK_MS），
+    // 只是每幀餵給它的時間變多，決定論不受影響。暫停時倍率為 0，accumulator 完全不動。
+    this.accumulator += deltaMs * speedMultiplier(this.speed);
     while (this.accumulator >= SIM_TICK_MS && ticks < MAX_TICKS_PER_FRAME) {
       this.sim.tick();
       for (const tile of this.detectTerrainOverrideChanges()) {

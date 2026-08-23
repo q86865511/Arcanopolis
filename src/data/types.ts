@@ -54,6 +54,8 @@ export interface PopulationConfig {
   growthFoodReserveDays: number;
   /** 糧食耗盡時每日餓死居民數 */
   starvationDeathsPerDay: number;
+  /** 居民 home 到工作地的最大曼哈頓距離，避免指派半日移動預算內無法抵達的職缺。 */
+  maxCommuteDistance: number;
 }
 
 /** 經濟常數表，對應 data\economy.json。「Day」＝一個遊戲日（見 core\sim\time.ts）。 */

@@ -87,6 +87,7 @@ describe('R6：population 常數表（parsePopulationConfig）', () => {
       growthPerDay: 1,
       growthFoodReserveDays: 5,
       starvationDeathsPerDay: 1,
+      maxCommuteDistance: 24,
     };
   }
 
@@ -148,6 +149,7 @@ describe('R6：population 常數表（parsePopulationConfig）', () => {
       growthPerDay: 1,
       growthFoodReserveDays: 1,
       starvationDeathsPerDay: 1,
+      maxCommuteDistance: 24,
     });
   });
 });
