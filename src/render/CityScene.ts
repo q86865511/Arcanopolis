@@ -3,12 +3,13 @@
 
 import Phaser from 'phaser';
 import { buildingTextureKey, villagerTextureKey } from './assets';
-import { BuildController } from './BuildController';
+import { BuildController, PREVIEW_DEPTH } from './BuildController';
 import { CameraController } from './CameraController';
 import { computeCameraBounds } from './cameraBounds';
-import { buildingSize } from './defs';
+import { BUILDING_DEFS, buildingSize } from './defs';
 import { createDemoWorld } from './demoWorld';
 import { changeSpeed, speedMultiplier, togglePause, INITIAL_SPEED, type GameSpeed } from './gameSpeed';
+import { barRect, filledWidth, progressRatio } from './progressBar';
 import { Hud } from './hud';
 import { TILE_H, TILE_W, gridToScreen, tileCenter } from './iso';
 import { TerrainRenderer, type TerrainRenderMetrics } from './TerrainRenderer';
@@ -60,6 +61,10 @@ export const CITY_SCENE_KEY = 'city';
 /** 一個 sim tick 的實時長度：每秒 10 tick。改這裡等於改遊戲速度，模擬本身仍是固定時步。 */
 export const SIM_TICK_MS = 100;
 
+/** 進度條配色：底用深墨、填色用與選單選中框同一個黃銅色，全介面一致。 */
+const PROGRESS_BG = 0x16131c;
+const PROGRESS_FILL = 0xd9a441;
+
 /** 單幀最多補跑幾個 tick。分頁切回來時一次補上千 tick 會直接凍住畫面。 */
 export const MAX_TICKS_PER_FRAME = 5;
 
@@ -103,6 +108,7 @@ export class CityScene extends Phaser.Scene {
    * 可抓新增、刪除與 type 改變；resource-only 變動不重烘，因為畫面地形沒有改變。
    */
   private terrainOverrideTypes = new Map<string, string>();
+  private progressBars!: Phaser.GameObjects.Graphics;
   private accumulator = 0;
   private speed: GameSpeed = INITIAL_SPEED;
 
@@ -159,6 +165,10 @@ export class CityScene extends Phaser.Scene {
     this.hud.create();
     this.hud.updateViewport(this.cameras.main);
     this.cameras.main.ignore(this.hud.displayObjects);
+
+    // 進度條掛在世界層（會跟著捲動縮放），depth 壓在建造預覽之下、所有建築之上
+    this.progressBars = this.add.graphics().setDepth(PREVIEW_DEPTH - 1);
+    this.uiCamera.ignore(this.progressBars);
 
     this.build = new BuildController(
       this,
@@ -229,6 +239,40 @@ export class CityScene extends Phaser.Scene {
     this.camera.setWorldBounds(target.x, target.y, target.w, target.h);
   }
 
+  /**
+   * 重畫所有可見建築的進度條。每次 sim tick 後呼叫一次，不逐幀重畫——
+   * 進度只在 tick 中變動，逐幀重畫等於每秒白做 50 次。
+   *
+   * 只畫視野內的建築：大地圖上建築可能上千棟，畫面外的條沒人看得到卻照樣要算。
+   */
+  private drawProgressBars(): void {
+    const g = this.progressBars;
+    g.clear();
+    const view = this.cameras.main.worldView;
+    for (const building of this.state.buildings) {
+      const def = BUILDING_DEFS.find((candidate) => candidate.id === building.type);
+      const ratio = progressRatio(building, def);
+      if (ratio === null || ratio <= 0) continue;
+
+      const anchor = buildingAnchor(building.x, building.y);
+      const sprite = this.buildingSprites.get(building.id);
+      const rect = barRect(anchor.x, anchor.y, sprite?.displayHeight ?? 0);
+      if (
+        rect.x + rect.w < view.x ||
+        rect.x > view.right ||
+        rect.y + rect.h < view.y ||
+        rect.y > view.bottom
+      ) {
+        continue;
+      }
+
+      g.fillStyle(PROGRESS_BG, 0.75);
+      g.fillRect(rect.x - 1, rect.y - 1, rect.w + 2, rect.h + 2);
+      g.fillStyle(PROGRESS_FILL, 1);
+      g.fillRect(rect.x, rect.y, filledWidth(ratio), rect.h);
+    }
+  }
+
   /** 速度鍵獨立於 BuildController：數字鍵已被建築選單佔滿，這裡用空白鍵與 - = 一組。 */
   private attachSpeedKeys(): void {
     const keyboard = this.input.keyboard;
@@ -279,6 +323,7 @@ export class CityScene extends Phaser.Scene {
     if (ticks > 0) {
       this.syncBuildings();
       this.syncCitizens();
+      this.drawProgressBars();
       this.hud.refresh();
     }
     if (terrainChanges.size > 0) this.hud.updateTerrain([...terrainChanges.values()]);
