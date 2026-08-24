@@ -18,6 +18,13 @@ export const GAME_TEXTURES: readonly TextureEntry[] = [
   { key: 'tile-rock-01', url: new URL('../../assets/game/tile-rock-01.png', import.meta.url).href },
   { key: 'tile-ore-01', url: new URL('../../assets/game/tile-ore-01.png', import.meta.url).href },
   { key: 'tile-mountain-01', url: new URL('../../assets/game/tile-mountain-01.png', import.meta.url).href },
+  // 地表變體：同一種地形的第二/第三張圖，供渲染層決定論挑選以打散鋪排的重複感。
+  { key: 'tile-grass-03', url: new URL('../../assets/game/tile-grass-03.png', import.meta.url).href },
+  { key: 'tile-forest-02', url: new URL('../../assets/game/tile-forest-02.png', import.meta.url).href },
+  { key: 'tile-sand-02', url: new URL('../../assets/game/tile-sand-02.png', import.meta.url).href },
+  { key: 'tile-rock-02', url: new URL('../../assets/game/tile-rock-02.png', import.meta.url).href },
+  { key: 'tile-mountain-02', url: new URL('../../assets/game/tile-mountain-02.png', import.meta.url).href },
+  { key: 'tile-mountain-03', url: new URL('../../assets/game/tile-mountain-03.png', import.meta.url).href },
   { key: 'tile-water-shore-tl', url: new URL('../../assets/game/tile-water-shore-tl.png', import.meta.url).href },
   { key: 'tile-water-shore-tr', url: new URL('../../assets/game/tile-water-shore-tr.png', import.meta.url).href },
   { key: 'tile-water-shore-br', url: new URL('../../assets/game/tile-water-shore-br.png', import.meta.url).href },
@@ -40,6 +47,26 @@ export const GAME_TEXTURES: readonly TextureEntry[] = [
   { key: 'market-01', url: new URL('../../assets/game/market-01.png', import.meta.url).href },
   { key: 'wall-01', url: new URL('../../assets/game/wall-01.png', import.meta.url).href },
   { key: 'watchtower-01', url: new URL('../../assets/game/watchtower-01.png', import.meta.url).href },
+  // 建築外觀變體與建造中鷹架：變體避免整排建築長得一模一樣，
+  // scaffold 是疊在建築上表示「建造中」的外框式素材。兩者的挑選/疊加邏輯屬渲染層。
+  { key: 'house-02', url: new URL('../../assets/game/house-02.png', import.meta.url).href },
+  { key: 'house-03', url: new URL('../../assets/game/house-03.png', import.meta.url).href },
+  { key: 'farm-02', url: new URL('../../assets/game/farm-02.png', import.meta.url).href },
+  { key: 'scaffold-01', url: new URL('../../assets/game/scaffold-01.png', import.meta.url).href },
+  // 地面裝飾散佈物：8-21px 的小 sprite，由渲染層決定論散佈到地格上消除空曠感。
+  // 無底座、可疊在任何地形之上。
+  { key: 'decor-rock-01', url: new URL('../../assets/game/decor-rock-01.png', import.meta.url).href },
+  { key: 'decor-rock-02', url: new URL('../../assets/game/decor-rock-02.png', import.meta.url).href },
+  { key: 'decor-rock-03', url: new URL('../../assets/game/decor-rock-03.png', import.meta.url).href },
+  { key: 'decor-bush-01', url: new URL('../../assets/game/decor-bush-01.png', import.meta.url).href },
+  { key: 'decor-bush-02', url: new URL('../../assets/game/decor-bush-02.png', import.meta.url).href },
+  { key: 'decor-bush-03', url: new URL('../../assets/game/decor-bush-03.png', import.meta.url).href },
+  { key: 'decor-flower-01', url: new URL('../../assets/game/decor-flower-01.png', import.meta.url).href },
+  { key: 'decor-flower-02', url: new URL('../../assets/game/decor-flower-02.png', import.meta.url).href },
+  { key: 'decor-stump-01', url: new URL('../../assets/game/decor-stump-01.png', import.meta.url).href },
+  { key: 'decor-log-01', url: new URL('../../assets/game/decor-log-01.png', import.meta.url).href },
+  { key: 'decor-puddle-01', url: new URL('../../assets/game/decor-puddle-01.png', import.meta.url).href },
+  { key: 'decor-rut-01', url: new URL('../../assets/game/decor-rut-01.png', import.meta.url).href },
   { key: 'villager-01', url: new URL('../../assets/game/villager-01.png', import.meta.url).href },
   { key: 'villager-02', url: new URL('../../assets/game/villager-02.png', import.meta.url).href },
 ];

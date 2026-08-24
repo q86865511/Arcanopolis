@@ -64,10 +64,56 @@ grid, plain solid white background, no drop shadow
 ```
 pixel art, isometric 2:1 projection, medieval fantasy city-builder terrain tile,
 DawnBringer DB32 32-color palette, top-left 45-degree lighting, flat shading with
-subtle dithering, no outline, no anti-aliasing, crisp pixel edges, subject is a single
-isometric diamond terrain tile that fills the entire diamond with no blank pixels along
-any edge, grid-aligned 64x32 footprint, plain solid white background, no drop shadow
+subtle dithering, no anti-aliasing, crisp pixel edges, subject is a single isometric
+diamond terrain tile that fills the entire diamond with no blank pixels along any edge,
+grid-aligned 64x32 footprint, plain solid white background, no drop shadow.
+NO OUTLINE OF ANY KIND: do not draw a dark border, rim or contour around the diamond
+or around any feature inside it; the terrain colours must run all the way to the edge.
+SURFACE STRUCTURE IS MANDATORY: this image will be downsampled about 24 times, so any
+feature narrower than 50 pixels disappears completely. Cover the whole diamond with
+large, chunky, irregular patches of the terrain colour ramp - broad tonal blocks,
+clumps and bare spots at least 60-120 pixels across. Never a flat single colour, and
+never fine speckled noise (fine noise averages back into flat colour when downsampled).
+NO CENTRED MOTIF: keep the detail asymmetric and off-centre, with no single recognisable
+object in the middle, so that tiling many copies shows no repeating pattern.
 ```
+
+三處要求各自對應一個實測缺陷（2026-08-24 修訂）：
+
+- **NO OUTLINE OF ANY KIND**：舊版只寫 `no outline`，AI 照樣加黑邊，後處理得侵蝕 alpha 補救。
+- **SURFACE STRUCTURE**：raw 1536 寬降到 64 寬是約 24 倍，raw 上 50px 才等於成品 2px。
+  不講清楚這件事，AI 會畫細雜訊，而細雜訊降採樣後平均回純色——舊 grass 成品的中央標準差
+  只有 2.9 就是這樣來的。
+- **NO CENTRED MOTIF**：居中主體是鋪排出現壁紙感的唯一來源（舊 mountain 每格一座同樣的山）。
+
+### 地形 tile 的驗收（2026-08-24 訂，數值已由第一批 10 張實測校準）
+
+跑 `node scripts\verify-terrain-tiles.mjs --tiles <名稱> --out <目錄>`：印指標並產 5×5 鋪排圖。
+單張成品過關不算數，**一律要鋪 5×5 目視**。
+
+#### 質性規則（決定性的是這三條，不是數字）
+
+第一批 10 張有 8 張在鋪排時失敗，兩種失敗模式各自對應一條規則：
+
+1. **禁方向性紋理**——帶、層理、浪紋、犁溝、任何平行走向。
+   鋪排時它們會跨過格界連成貫穿整張地圖的斜條紋（rock「橫向岩層帶」、sand「帶狀起伏」、
+   dirt「淺溝」三張都是這樣死的）。結構必須無方向性。
+2. **禁高對比離散特徵物**——綠草上的橘色土斑、黃沙上的藍灰石礫。
+   每一個都成為地標，眼睛立刻認出它們排成規律陣列。斑點與團塊必須與底色**同色系**，
+   只差一階明暗，絕不用對比色相。
+3. **目標形態＝同色系有機團塊的均勻地毯**——通篇忙碌多變，但質地處處均勻、沒有焦點。
+   唯一一次通過的 grass-02 就是這樣（深綠草簇塊，只有明暗差）。
+
+#### 量化指標（輔助篩選，不能取代目視）
+
+| 指標 | 目標 | 說明 |
+|---|---|---|
+| 中央標準差＝地表結構強度 | **12–18** | 校準自實測：舊版純色是 2.2–2.9；通過的 grass-02 是 16.2；20.1／22.8 那兩張失敗 |
+| 色數 | ≤ 32 | |
+| 亮部散布 | 參考值 | **抓不到「居中主體」**——舊 mountain（每格一座山）只有 0.83，比別張低卻不足以定罪 |
+| 對邊色差＝接縫 | 參考值 | **對有結構的 tile 會誤報**——通過的 grass-02 量到 16.1 卻看不出接縫 |
+
+後兩項只當提示。「壁紙感」是「有沒有可辨識的形狀」的問題，統計量抓不到，只能靠鋪排目視。
 
 ## 參考圖組（每批生圖附上）
 

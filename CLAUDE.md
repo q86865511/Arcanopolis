@@ -18,7 +18,17 @@
 
 - 風格規格以 `docs\art-bible.md` 為唯一準則；生圖 prompt 的風格前綴逐字取自該檔。
 - `assets\raw\` 是生圖原始檔，**永不覆蓋、永不手改**；後處理產物進 `assets\game\`。
-- 生圖走 Codex $imagegen（codex-imagegen skill），後處理走 pixel-asset-pipeline skill。
+- 生圖走 Codex $imagegen（codex-imagegen skill）。**後處理一律用專案的三支腳本，不要手打指令**：
+  `scripts\process-terrain-tiles.mjs`（地形 tile：套菱形遮罩、按 64×32 縮）、
+  `scripts\process-building-sprites.mjs`（建築：按寬度 N×64 縮）、
+  `scripts\process-decor-sprites.mjs`（裝飾散佈物：按高度縮）。
+  三支的 `tileNames`／`buildingSprites`／`decorSprites` 清單支援 `{raw, out}` 映射——
+  `assets\raw` 永不覆蓋，重生的素材靠映射落到現用的 texture key 上。
+- **降採樣一律 Lanczos，不得用 `-filter point`**：12 倍以上降採樣時 point 會把風車葉片、
+  梯子、旗桿這類 1px 細長結構整條打散。
+- 地形 tile 驗收跑 `node scripts\verify-terrain-tiles.mjs [--tiles a,b] [--out <dir>]`：
+  印量化指標並產 5×5 鋪排圖。**單張過關不算數，一律要鋪 5×5 目視**——
+  判準與兩種鋪排失敗模式見 `docs\art-bible.md` 的「地形 tile 的驗收」。
 
 ## 開發指令
 

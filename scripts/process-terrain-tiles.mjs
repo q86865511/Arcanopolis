@@ -6,17 +6,41 @@ import { spawnSync } from 'node:child_process'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = path.resolve(scriptDir, '..')
-// 地形 tile 清單：新增地形素材時加進來即可（輸入一律取自 assets\raw 的同名原始生圖）
+/**
+ * 地形 tile 清單。兩種寫法：
+ * - 字串：raw 檔名與輸出檔名相同（一般情況，新增素材時直接加檔名即可）。
+ * - `{ raw, out }`：raw 用新檔名，輸出蓋到既有的遊戲素材檔名上。
+ *
+ * 為什麼需要後者：`assets\raw` 永不覆蓋（它是重跑管線的輸入源，必須保留每一代的原圖），
+ * 但重生的素材得落到渲染層已經在用的 texture key 上，畫面才會變、才驗證得了改善。
+ * 兩個要求同時成立的唯一辦法就是把「輸入檔名」與「輸出檔名」拆開。
+ */
 const tileNames = [
-  'tile-grass-01.png',
-  'tile-grass-02.png',
-  'tile-dirt-01.png',
+  // 2026-08-24 批次 1 重生：舊版原圖是純色加細雜訊，降採樣後只剩單一顏色
+  // （實測中央標準差 2.2-2.9）。-v2 原圖依修訂後的地形前綴生成，帶大塊地表結構。
+  // v2 那批 10 張只有 grass-02 與 forest-01 通過鋪排目視；其餘 8 張因方向性紋理
+  // （岩層帶／浪紋／犁溝）或高對比地標（橘土斑／藍石礫）在鋪排時形成明顯陣列，
+  // 已於 v3 重生。判準與失敗模式見 docs\art-bible.md 的「地形 tile 的驗收」。
+  { raw: 'tile-grass-01-v3.png', out: 'tile-grass-01.png' },
+  { raw: 'tile-grass-02-v2.png', out: 'tile-grass-02.png' },
+  { raw: 'tile-grass-03-v3.png', out: 'tile-grass-03.png' },
+  { raw: 'tile-forest-01-v5.png', out: 'tile-forest-01.png' }, // v2 的樹冠在實機大視野下仍成陣列，v5 改為連續林冠層
+  // forest-02 走到 v4：v3 的「4 個大型樹冠」被 AI 畫成等距排列的分離綠球，鋪排像一盤
+  // 高爾夫球；v4 改要求「連續林冠層、樹冠互相咬合、看不出單棵分界」。
+  { raw: 'tile-forest-02-v4.png', out: 'tile-forest-02.png' },
+  { raw: 'tile-sand-01-v3.png', out: 'tile-sand-01.png' },
+  { raw: 'tile-sand-02-v3.png', out: 'tile-sand-02.png' },
+  { raw: 'tile-rock-01-v3.png', out: 'tile-rock-01.png' },
+  { raw: 'tile-rock-02-v3.png', out: 'tile-rock-02.png' },
+  { raw: 'tile-dirt-01-v3.png', out: 'tile-dirt-01.png' },
   'tile-water-01.png',
-  'tile-sand-01.png',
-  'tile-forest-01.png',
-  'tile-rock-01.png',
   'tile-ore-01.png',
-  'tile-mountain-01.png',
+  // 批次 2a 山地重構：舊 mountain 每格畫一座有尖頂的完整小山，鋪排成整齊的山峰陣列，
+  // 而且過暗（亮度 55/255）與明亮草地並排時把畫面切成兩塊。
+  // 三張改為「無主體的岩石坡面紋理」，供渲染層混用鋪成連續高地。
+  { raw: 'tile-mountain-01-v2.png', out: 'tile-mountain-01.png' },
+  { raw: 'tile-mountain-02-v2.png', out: 'tile-mountain-02.png' },
+  { raw: 'tile-mountain-03-v2.png', out: 'tile-mountain-03.png' },
   // 單邊過渡 tile：檔名後綴是「過渡到另一種地形的那條菱形邊」在螢幕上的方位。
   // tl=左上邊、tr=右上邊、br=右下邊、bl=左下邊，與 TerrainRenderer 的鄰格對應表一致。
   'tile-water-shore-tl.png',
@@ -88,10 +112,13 @@ const maskPath = path.join(workDir, 'diamond-mask.pgm')
 const opaquePixels = createDiamondMask(maskPath)
 
 try {
-  for (const tileName of tileNames) {
+  for (const entry of tileNames) {
+    const tileName = typeof entry === 'string' ? entry : entry.raw
+    const outputName = typeof entry === 'string' ? entry : entry.out
     const rawPath = path.join(projectRoot, 'assets', 'raw', tileName)
-    const outputPath = path.join(projectRoot, 'assets', 'game', tileName)
+    const outputPath = path.join(projectRoot, 'assets', 'game', outputName)
     const backgroundRemovedPath = path.join(workDir, `${tileName}.background-removed.png`)
+    const erodedPath = path.join(workDir, `${tileName}.eroded.png`)
     const resizedPath = path.join(workDir, `${tileName}.resized.png`)
     const maskedPath = path.join(workDir, `${tileName}.masked.png`)
 
@@ -120,6 +147,23 @@ try {
       backgroundRemovedPath,
       '(', '+clone', '-alpha', 'extract', '-morphology', 'Erode', 'Diamond:12', ')',
       '-alpha', 'off', '-compose', 'CopyAlpha', '-composite',
+      erodedPath,
+    ])
+    const erodedGeometry = run(magick, [erodedPath, '-format', '%wx%h', 'info:'])
+
+    // Refill the eroded rim by stretching the tile's own content outwards, not by
+    // flooding it with one averaged colour.
+    //
+    // Flooding with surfaceColor gives every tile a rim of flat mid-grey while the
+    // interior keeps its light and shade; once tiled, those identical rims line up
+    // into visible grid lines (measured: old grass-01 rim was 7 levels brighter than
+    // its centre). Stretching keeps each rim pixel close to whatever sits next to it,
+    // so neighbouring tiles meet without a seam. surfaceColor stays as a last-resort
+    // backstop for any corner the stretch still fails to cover.
+    run(magick, [
+      erodedPath,
+      '(', '+clone', '-resize', '112%', '-gravity', 'center', '-extent', erodedGeometry, ')',
+      '+swap', '-compose', 'over', '-composite',
       '-background', surfaceColor, '-alpha', 'remove', '-alpha', 'off',
       '-filter', 'Lanczos', '-resize', '64x32!',
       resizedPath,
