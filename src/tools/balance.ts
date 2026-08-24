@@ -41,9 +41,22 @@ const FOOD_RESERVE_DAYS = 2;
 const WOOD_RESERVE = 500;
 const FOOD_CHAIN = ['farm', 'mill', 'bakery'] as const;
 const OTHER_CHAIN = ['lumber-camp', 'quarry', 'sawmill', 'mine', 'smelter', 'blacksmith'] as const;
-const FOOD_CHAIN_WORKERS = FOOD_CHAIN.reduce(
-  (sum, type) => sum + (BUILDING_DEFS.find((def) => def.id === type)?.jobs ?? 0),
-  0,
+
+/**
+ * 一條食物鏈（農場＋磨坊＋麵包坊）大約養得起幾個人——由資料表推算，不寫死。
+ *
+ * 麵包坊滿編時每 tick 產 food，但居民只有上半日在工作地（下半日返家，見 movement），
+ * 所以一天的有效產出約是 production.food × TICKS_PER_DAY/2；再乘 0.75 折掉通勤時間與
+ * 整批交貨的空窗。除以每人每日食量就是這條鏈的承載人數。
+ * 這個數字只用來決定「該蓋幾條鏈」，估得保守一點寧可多蓋，不會有正確性問題。
+ */
+const CITIZENS_PER_FOOD_CHAIN = Math.max(
+  1,
+  Math.floor(
+    (((BUILDING_DEFS.find((def) => def.id === 'bakery')?.production.food ?? 0) * TICKS_PER_DAY) / 2) *
+      0.75 /
+      POPULATION_CONFIG.foodPerCitizenPerDay,
+  ),
 );
 
 const STARTING_BUILDINGS: ReadonlyArray<readonly [string, number, number]> = [
@@ -101,19 +114,60 @@ export function housingCapacity(state: GameState): number {
   return state.buildings.reduce((sum, building) => sum + buildingDef(building.type).housing, 0);
 }
 
-/** 固定從世界中心向外逐圈搜尋；候選合法性一律由 core 決定。 */
+/** 住宅群的重心：搜尋錨點跟著城市長，而非釘死在世界中心。
+ *  沒有住宅時（理論上不會發生，起始配置就帶兩間）退回世界中心。 */
+function cityCentroid(state: GameState): { x: number; y: number } {
+  const houses = state.buildings.filter((b) => buildingDef(b.type).housing > 0);
+  const pool = houses.length > 0 ? houses : state.buildings;
+  if (pool.length === 0) {
+    const center = Math.floor(state.worldSize / 2);
+    return { x: center, y: center };
+  }
+  return {
+    x: Math.round(pool.reduce((sum, b) => sum + b.x, 0) / pool.length),
+    y: Math.round(pool.reduce((sum, b) => sum + b.y, 0) / pool.length),
+  };
+}
+
+/**
+ * 從住宅重心向外逐圈搜尋；候選合法性一律由 core 的 canBuildAt 決定。
+ *
+ * 錨點必須是住宅重心而非世界中心：釘死在世界中心時，城市長大後新建築會離住宅越來越遠，
+ * 最後落在可通勤半徑外變成永遠沒人上工的空殼（實測有三座採石場距住宅 23.7～33.7 格，
+ * 上限是 24），而那些建築仍然吃掉了建造成本——曲線因此把「勞力到不了」誤報成「數值不平衡」。
+ * 錨點跟著住宅走之後，通勤距離自然被壓在範圍內，不需要額外的距離過濾。
+ */
 function findBuildSite(state: GameState, def: BuildingDef): { x: number; y: number } | null {
-  const center = Math.floor(state.worldSize / 2);
-  const maxRadius = Math.max(center, state.worldSize - 1 - center);
+  const centroid = cityCentroid(state);
+  const maxRadius = Math.max(
+    centroid.x,
+    centroid.y,
+    state.worldSize - 1 - centroid.x,
+    state.worldSize - 1 - centroid.y,
+  );
   for (let radius = 0; radius <= maxRadius; radius++) {
-    const minX = Math.max(0, center - radius);
-    const maxX = Math.min(state.worldSize - 1, center + radius);
-    const minY = Math.max(0, center - radius);
-    const maxY = Math.min(state.worldSize - 1, center + radius);
+    const minX = Math.max(0, centroid.x - radius);
+    const maxX = Math.min(state.worldSize - 1, centroid.x + radius);
+    const minY = Math.max(0, centroid.y - radius);
+    const maxY = Math.min(state.worldSize - 1, centroid.y + radius);
     for (let y = minY; y <= maxY; y++) {
       for (let x = minX; x <= maxX; x++) {
-        if (Math.max(Math.abs(x - center), Math.abs(y - center)) !== radius) continue;
-        if (canBuildAt(state, def, x, y, BUILDING_DEFS)) return { x, y };
+        if (Math.max(Math.abs(x - centroid.x), Math.abs(y - centroid.y)) !== radius) continue;
+        if (!canBuildAt(state, def, x, y, BUILDING_DEFS)) continue;
+        // 不與任何既有建築正交相鄰：保證每棟建築四周都留有可走的空格。
+        //
+        // 少了這條會把居民活活封在家裡——實測過一次：從住宅重心向外緊密螺旋擺放後，
+        // 有居民的家四個正交鄰格全被建築佔滿，他永遠走不出那一格，被指派的工作
+        // 到崗數恆為 0，磨坊因此只剩一半產能、全城慢性餓死。canBuildAt 只驗地形與
+        // 佔格，不驗連通性，這層要在這裡自己補。
+        if (
+          state.buildings.some(
+            (building) => Math.abs(building.x - x) + Math.abs(building.y - y) === 1,
+          )
+        ) {
+          continue;
+        }
+        return { x, y };
       }
     }
   }
@@ -142,17 +196,23 @@ function buildCommands(state: GameState, type: string): Command[] {
   return commands;
 }
 
-function shortestChainBuilding(state: GameState, chain: readonly string[]): string {
-  let selected = chain[0];
-  let selectedCount = Infinity;
-  for (const type of chain) {
-    const count = state.buildings.filter((building) => building.type === type).length;
-    if (count < selectedCount) {
-      selected = type;
-      selectedCount = count;
-    }
+/**
+ * 依「目前棟數」由少到多嘗試 chain 內每個型別，回傳第一個蓋得成的指令。
+ * 不能只挑棟數最少的硬蓋一個型別——通勤範圍內若沒有合法地形，findBuildSite
+ * 會回 null，若不備援其他型別，策略會卡死在同一個蓋不出來的型別上，
+ * 鏈上其餘型別永遠輪不到（見 M4.5 平衡實測：quarry 卡死時 lumber-camp/sawmill 也不會被試）。
+ */
+function buildFromChainAscending(state: GameState, chain: readonly string[]): Command[] {
+  const sorted = [...chain].sort(
+    (a, b) =>
+      state.buildings.filter((building) => building.type === a).length -
+      state.buildings.filter((building) => building.type === b).length,
+  );
+  for (const type of sorted) {
+    const commands = buildCommands(state, type);
+    if (commands.length > 0) return commands;
   }
-  return selected;
+  return [];
 }
 
 function buyFoodWithSurplusWood(state: GameState, targetFood: number): Command[] {
@@ -189,15 +249,42 @@ export function playerStrategy(state: GameState): Command[] {
     return buildCommands(state, 'house');
   }
 
+  // 勞力預算：已存在的職缺總數不得超過人口。
+  //
+  // 這是這個策略最重要的一條規則。jobs system 依「離家最近」指派且先搶先贏，不會為了
+  // 更重要的產業把已上工的人挪走——所以多開一個養不起的職缺，代價不是那棟建築閒置，
+  // 而是把勞力從既有產線稀釋掉。實測過兩種錯法：職缺開太多時，農場與磨坊吃光工人、
+  // 麵包坊掛零，穀物與麵粉堆到數千而糧食是 0，全城餓死；反之若完全不開新職缺，
+  // 城市就不會成長。因此以「還有沒有沒工作的人」當唯一的開工閘門。
+  const totalJobSlots = state.buildings.reduce((sum, building) => sum + buildingDef(building.type).jobs, 0);
+  const spareLabour = state.citizens.length - totalJobSlots;
+
   const foodReserve =
     Math.max(1, state.citizens.length) * POPULATION_CONFIG.foodPerCitizenPerDay * FOOD_RESERVE_DAYS;
-  if (getResource(state, 'food') < foodReserve) {
-    const shortest = shortestChainBuilding(state, FOOD_CHAIN);
-    const shortestCount = state.buildings.filter((building) => building.type === shortest).length;
-    const staffedChainLimit = Math.max(1, Math.ceil(state.citizens.length / FOOD_CHAIN_WORKERS));
-    return shortestCount >= staffedChainLimit
-      ? buyFoodWithSurplusWood(state, foodReserve)
-      : buildCommands(state, shortest);
+  const foodShort = getResource(state, 'food') < foodReserve;
+
+  if (foodShort) {
+    // 糧食吃緊且還有閒置勞力 → 補食物鏈最短的一環；沒有閒置勞力就只能花錢應急，
+    // 再加蓋只會稀釋現有產線，讓情況更糟。
+    if (spareLabour > 0) {
+      const commands = buildFromChainAscending(state, FOOD_CHAIN);
+      if (commands.length > 0) return commands;
+    }
+    return buyFoodWithSurplusWood(state, foodReserve);
+  }
+
+  if (spareLabour <= 0) return [];
+
+  // 食物鏈優先吃掉閒置勞力：鏈的條數要跟著人口長，三段的棟數也要彼此不落後，
+  // 兩者都達標才輪到其他產業。只看「三段是否等長」是不夠的——1/1/1 也是等長，
+  // 但人口漲上去之後那一條鏈就餵不飽了。
+  const targetChains = Math.max(1, Math.ceil(state.citizens.length / CITIZENS_PER_FOOD_CHAIN));
+  const foodCounts = FOOD_CHAIN.map(
+    (type) => state.buildings.filter((building) => building.type === type).length,
+  );
+  if (Math.min(...foodCounts) < targetChains) {
+    const commands = buildFromChainAscending(state, FOOD_CHAIN);
+    if (commands.length > 0) return commands;
   }
 
   if (!state.buildings.some((building) => building.type === 'market')) {
@@ -205,7 +292,7 @@ export function playerStrategy(state: GameState): Command[] {
     if (commands.length > 0) return commands;
   }
 
-  return buildCommands(state, shortestChainBuilding(state, OTHER_CHAIN));
+  return buildFromChainAscending(state, OTHER_CHAIN);
 }
 
 function findStartingAnchor(state: GameState): { x: number; y: number } {

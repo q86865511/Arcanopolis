@@ -42,20 +42,29 @@ describe('自動化平衡模擬', () => {
       .filter((value, index) => value < foodIntermediates[index]).length;
 
     // 這條帶是描述現況的護欄，不是設計目標；資料表變動造成約 30% 以上偏移時應立即報警。
+    // 基準重訂於 2026-08-24：修掉腳本玩家的建址缺陷後（見 balance.ts 的 findBuildSite），
+    // 曲線與修正前完全不同——舊基準量到的是「多數建築沒人到得了」的假象。
+    // 實測值：人口 36、建築 27、最低糧食 1080、金幣峰值 1165、中間產物峰值 10948、回落 5 次。
     expect(finalState.citizens.length).toBeGreaterThan(0);
     expect(finalState.citizens.length).toBeGreaterThanOrEqual(25);
     expect(finalState.citizens.length).toBeLessThanOrEqual(47);
     expect(Math.min(...foodValues)).toBeGreaterThanOrEqual(750);
     expect(Math.min(...foodValues)).toBeLessThanOrEqual(1_410);
     expect(longestZeroFoodStreak(samples)).toBe(0);
-    expect(Math.max(...goldValues)).toBeGreaterThanOrEqual(116);
-    expect(Math.max(...goldValues)).toBeLessThanOrEqual(216);
-    expect(Math.max(...foodIntermediates)).toBeGreaterThanOrEqual(7_400);
-    expect(Math.max(...foodIntermediates)).toBeLessThanOrEqual(13_850);
-    expect(intermediateDecreases).toBeGreaterThanOrEqual(5);
-    expect(intermediateDecreases).toBeLessThanOrEqual(11);
+    expect(Math.max(...goldValues)).toBeGreaterThanOrEqual(815);
+    expect(Math.max(...goldValues)).toBeLessThanOrEqual(1_515);
+    expect(Math.max(...foodIntermediates)).toBeGreaterThanOrEqual(7_660);
+    expect(Math.max(...foodIntermediates)).toBeLessThanOrEqual(14_240);
+    expect(intermediateDecreases).toBeGreaterThanOrEqual(3);
+    expect(intermediateDecreases).toBeLessThanOrEqual(9);
     expect(finalState.buildings.length).toBeGreaterThan(6);
-    expect(finalState.buildings.length).toBeGreaterThanOrEqual(31);
-    expect(finalState.buildings.length).toBeLessThanOrEqual(58);
+    expect(finalState.buildings.length).toBeGreaterThanOrEqual(19);
+    expect(finalState.buildings.length).toBeLessThanOrEqual(36);
+
+    // 建址修正的回歸鎖：石材與鐵礦在 30 天內必須真的被生產出來。
+    // 修正前這兩條產線的建築都蓋在通勤範圍外，永遠沒人到得了，石材第 27 天歸零、
+    // 鐵礦全程為 0——當時卻被誤讀成「資料表的數值需要調整」。
+    expect(finalState.resources.stone).toBeGreaterThan(0);
+    expect(finalState.resources['iron-ore']).toBeGreaterThan(0);
   });
 });
