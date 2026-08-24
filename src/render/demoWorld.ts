@@ -79,6 +79,27 @@ function findStartingAnchor(state: GameState): { x: number; y: number } {
   throw new Error(`createDemoWorld: worldSize=${state.worldSize} 找不到可放置全部起始建築的區域`);
 }
 
+/**
+ * 依既有 state 組出 Simulation。存檔載入與開新局共用同一份系統組裝——
+ * 兩邊各自 new 一次的話，日後加系統只改了一邊，載入的存檔會少跑某個系統而行為悄悄不同。
+ */
+export function createSimulationFor(state: GameState): Simulation {
+  return new Simulation(
+    state,
+    [
+      createJobsSystem(BUILDING_DEFS, POPULATION_CONFIG.maxCommuteDistance),
+      createProductionSystem(BUILDING_DEFS, TERRAIN_ECONOMY),
+      createPopulationSystem(BUILDING_DEFS, POPULATION_CONFIG),
+      // 稅收排在人口之後：同一日界先結算餓死/成長，再依「結算後」的就業人數課稅。
+      createTaxSystem(ECONOMY_CONFIG),
+      createRegrowthSystem(TERRAIN_ECONOMY),
+      createMovementSystem(BUILDING_DEFS, { w: state.worldSize, h: state.worldSize }),
+    ],
+    BUILDING_DEFS,
+    { resourceDefs: RESOURCE_DEFS, economy: ECONOMY_CONFIG },
+  );
+}
+
 export function createDemoWorld(worldSize?: number): DemoWorld {
   const state = createInitialState(DEMO_SEED);
   if (worldSize !== undefined) {
@@ -107,20 +128,7 @@ export function createDemoWorld(worldSize?: number): DemoWorld {
     state.citizens.push(citizen);
   }
 
-  const sim = new Simulation(
-    state,
-    [
-      createJobsSystem(BUILDING_DEFS, POPULATION_CONFIG.maxCommuteDistance),
-      createProductionSystem(BUILDING_DEFS, TERRAIN_ECONOMY),
-      createPopulationSystem(BUILDING_DEFS, POPULATION_CONFIG),
-      // 稅收排在人口之後：同一日界先結算餓死/成長，再依「結算後」的就業人數課稅。
-      createTaxSystem(ECONOMY_CONFIG),
-      createRegrowthSystem(TERRAIN_ECONOMY),
-      createMovementSystem(BUILDING_DEFS, { w: state.worldSize, h: state.worldSize }),
-    ],
-    BUILDING_DEFS,
-    { resourceDefs: RESOURCE_DEFS, economy: ECONOMY_CONFIG },
-  );
+  const sim = createSimulationFor(state);
 
   return {
     state,

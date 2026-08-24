@@ -7,9 +7,11 @@ import { BuildController, PREVIEW_DEPTH } from './BuildController';
 import { CameraController } from './CameraController';
 import { computeCameraBounds } from './cameraBounds';
 import { BUILDING_DEFS, buildingSize } from './defs';
-import { createDemoWorld } from './demoWorld';
+import { createDemoWorld, createSimulationFor } from './demoWorld';
 import { changeSpeed, speedMultiplier, togglePause, INITIAL_SPEED, type GameSpeed } from './gameSpeed';
 import { barRect, filledWidth, progressRatio } from './progressBar';
+import { browserStorage, clearSave, loadGame, saveGame, type SaveStorage } from './persistence';
+import { timeFromTick } from '../core/sim/time';
 import { Hud } from './hud';
 import { TILE_H, TILE_W, gridToScreen, tileCenter } from './iso';
 import { TerrainRenderer, type TerrainRenderMetrics } from './TerrainRenderer';
@@ -111,16 +113,39 @@ export class CityScene extends Phaser.Scene {
   private progressBars!: Phaser.GameObjects.Graphics;
   private accumulator = 0;
   private speed: GameSpeed = INITIAL_SPEED;
+  private storage: SaveStorage | null = null;
+  /** 上次自動存檔時的遊戲日；日界才存一次，不是每 tick 都序列化整個世界。 */
+  private savedDay = 0;
+  /** 等待第二次按 N 確認的開新局請求。 */
+  private pendingNewGame = false;
 
   constructor() {
     super(CITY_SCENE_KEY);
   }
 
   create(): void {
+    this.storage = browserStorage();
     const world = createDemoWorld(requestedWorldSize());
     this.state = world.state;
     this.sim = world.sim;
     this.accumulator = 0;
+    this.pendingNewGame = false;
+
+    // 開機自動續上次進度。做成自動而非「按鍵讀檔」是因為真正的痛點是
+    // 重新整理就整座城市歸零——會忘記按鍵的情境正好就是會弄丟進度的情境。
+    let loadNotice: string | null = null;
+    if (this.storage !== null) {
+      const outcome = loadGame(this.storage);
+      if (outcome.status === 'loaded') {
+        this.state = outcome.state;
+        this.sim = createSimulationFor(this.state);
+        loadNotice = `已接續上次進度（第 ${timeFromTick(this.state.tick).totalDay} 天）`;
+      } else if (outcome.status === 'corrupt') {
+        // 壞檔不自動刪：玩家可能想手動搶救，靜默清掉會讓「城市不見了」毫無線索。
+        loadNotice = `存檔讀不回來，已開新局（原檔仍保留）：${outcome.reason}`;
+      }
+    }
+    this.savedDay = timeFromTick(this.state.tick).totalDay;
     this.buildingSprites.clear();
     this.citizenSprites.clear();
     this.knownBuildingIds.clear();
@@ -182,6 +207,8 @@ export class CityScene extends Phaser.Scene {
     this.uiCamera.ignore(this.build.displayObjects);
 
     this.attachSpeedKeys();
+    this.attachSaveKeys();
+    if (loadNotice !== null) this.hud.setNotice(loadNotice);
 
     // 視窗大小會變（Scale.RESIZE）：監聽要在場景關閉時解掉，否則場景重啟會疊上第二個
     // 監聽器，而舊監聽器持有的是已被銷毀的 hud/uiCamera。
@@ -273,6 +300,44 @@ export class CityScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * 每跨過一個遊戲日存一次檔。以「日」為粒度而非每 tick：序列化整個世界並不便宜，
+   * 而日界正好是人口、糧食、稅收結算的時點，存在這裡損失上限就是一天的進度。
+   */
+  private autoSaveOnDayBoundary(): void {
+    if (this.storage === null) return;
+    const day = timeFromTick(this.state.tick).totalDay;
+    if (day === this.savedDay) return;
+    this.savedDay = day;
+    const outcome = saveGame(this.storage, this.state);
+    if (!outcome.ok) {
+      // 存檔失敗最可能是配額用盡，而且會在城市變大後才發生——要說出來，
+      // 不然玩家會在完全不知情的狀況下繼續玩，直到某次重新整理才發現進度停在很久以前。
+      this.hud.setNotice(`自動存檔失敗：${outcome.reason}`);
+    }
+  }
+
+  /** N：開新局（兩段確認，比照拆除民居）。存檔是自動的，所以只需要一個「重來」的出口。 */
+  private attachSaveKeys(): void {
+    const keyboard = this.input.keyboard;
+    if (!keyboard) return;
+    keyboard.on('keydown-N', () => {
+      if (!this.pendingNewGame) {
+        this.pendingNewGame = true;
+        this.hud.setNotice('再按一次 N 確認開新局——目前的城市會被覆蓋，或按 Esc 取消');
+        return;
+      }
+      this.pendingNewGame = false;
+      if (this.storage !== null) clearSave(this.storage);
+      this.scene.restart();
+    });
+    keyboard.on('keydown-ESC', () => {
+      if (!this.pendingNewGame) return;
+      this.pendingNewGame = false;
+      this.hud.setNotice(null);
+    });
+  }
+
   /** 速度鍵獨立於 BuildController：數字鍵已被建築選單佔滿，這裡用空白鍵與 - = 一組。 */
   private attachSpeedKeys(): void {
     const keyboard = this.input.keyboard;
@@ -325,6 +390,7 @@ export class CityScene extends Phaser.Scene {
       this.syncCitizens();
       this.drawProgressBars();
       this.hud.refresh();
+      this.autoSaveOnDayBoundary();
     }
     if (terrainChanges.size > 0) this.hud.updateTerrain([...terrainChanges.values()]);
 
