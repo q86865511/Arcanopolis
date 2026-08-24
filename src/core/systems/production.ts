@@ -166,6 +166,7 @@ export function createProductionSystem(
         // 逐產出項各自算實產（地形建築要各自扣地形），不合併後再分攤——
         // 合併分攤會讓多產出建築的各項比例被抹平，與分批前的行為不一致。
         const actuals: number[] = [];
+        let terrainBlocked = false;
         let totalDesired = 0;
         let totalActual = 0;
         for (const [index, [, amount]] of outputEntries.entries()) {
@@ -180,6 +181,7 @@ export function createProductionSystem(
           const source = findTerrainSource(state, def, building.x, building.y, economy);
           if (source === null) {
             actuals[index] = 0;
+            terrainBlocked = true;
             continue;
           }
 
@@ -202,18 +204,23 @@ export function createProductionSystem(
             if (actuals[index] > 0) addResource(state, resourceId, actuals[index]);
           }
         } else if (nominalPerTick > 0) {
-          const progress = (building.progress ?? 0) + totalActual / nominalPerTick;
+          // 進度上限夾在一批：存檔可能帶進超出範圍的值（手改存檔，或資料表把 workTicks 調小後
+          // 載入舊檔），不夾住的話每個 tick 都會結算一批，等於憑空印資源。
+          const prior = Math.min(Math.max(building.progress ?? 0, 0), workTicks);
+          const progress = prior + totalActual / nominalPerTick;
           building.progress = progress;
           if (progress >= workTicks) {
             building.progress = progress - workTicks;
             for (const [resourceId, amount] of outputEntries) {
               addResource(state, resourceId, amount * workTicks);
             }
-          } else if (progress > 0 && totalActual === 0 && jobRatio > 0 && inputRatio > 0) {
-            // 有人在崗、原料也夠，卻一點都產不出來 → 只可能是地形資源採乾了，而且不會自己回來
-            // （森林再生要數天）。此時把未完成的進度按比例結算出去並歸零：那些樹已經砍掉了，
-            // 若一直留在進度裡等一批湊滿，玩家會看到「最後幾棵樹憑空消失」——那是資源被吃掉，
-            // 不是還沒做完。結算後總量與逐 tick 產出時完全相同。
+          } else if (progress > 0 && terrainBlocked) {
+            // 地形資源採乾了（找不到任何可用來源），而且不會自己回來（森林再生要數天）。
+            // 把未完成的進度按比例結算出去並歸零：那些樹已經砍掉了，若一直留在進度裡等一批
+            // 湊滿，玩家會看到「最後幾棵樹憑空消失」——那是資源被吃掉，不是還沒做完。
+            //
+            // 判定只看「地形有沒有被擋住」，不再附帶在崗率與原料是否充足的條件：
+            // 那兩者為 0 時同樣採不到地形，卻會讓已挖出的量永遠卡在進度裡出不來。
             building.progress = 0;
             for (const [resourceId, amount] of outputEntries) {
               addResource(state, resourceId, amount * progress);

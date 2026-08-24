@@ -174,3 +174,50 @@ describe('progress 的存檔往返（v5）', () => {
     }
   });
 });
+
+describe('第二審發現的邊界（M4.5-W2 修正批）', () => {
+  it('存檔帶進超出一批的 progress → 夾在一批，不會每 tick 重複出貨', () => {
+    const state = world('batched', 2);
+    // 手改存檔或資料表把 workTicks 調小後載入舊檔，都可能出現這種值
+    state.buildings[0].progress = WORK_TICKS * 100;
+    run(state, 5);
+    // 夾住後最多結算一批；沒夾的話 5 tick 會出 5 批
+    expect(getResource(state, 'wood')).toBeLessThanOrEqual(3 * WORK_TICKS);
+  });
+
+  it('progress 為負的存檔值不會反向扣資源', () => {
+    const state = world('batched', 2);
+    state.buildings[0].progress = -50;
+    run(state, WORK_TICKS);
+    expect(getResource(state, 'wood')).toBe(3 * WORK_TICKS);
+  });
+
+  it('地形採乾時即使同時缺原料、缺工人，未完成的進度一樣會結算', () => {
+    const defs: BuildingDef[] = [
+      {
+        id: 'mixed',
+        name: '混合坊',
+        size: { w: 1, h: 1 },
+        cost: {},
+        production: { stone: 2 },
+        inputs: { wood: 1 },
+        housing: 0,
+        jobs: 1,
+        workTicks: 50,
+        terrain: { on: ['rock'], consumes: ['rock'] },
+      },
+    ];
+    const state = createInitialState(1);
+    state.buildings.push({ id: 'b1', type: 'mixed', x: 6, y: 6 });
+    state.citizens.push({ id: 'w', home: 'h', job: 'b1', x: 6, y: 6 });
+    // 地形夠 2 tick、原料也剛好夠 2 tick：第 3 tick 時地形採乾且原料同時見底，
+    // 舊條件要求 inputRatio > 0 才結算，這種同時斷炊的情形會讓已挖出的石材永遠卡在進度裡。
+    state.terrainOverrides['6,6'] = { type: 'rock', resource: 4 };
+    addResource(state, 'wood', 2);
+    run(state, 100, defs);
+
+    // 挖出多少就要入帳多少；卡在進度裡出不來等於資源被吃掉
+    expect(getResource(state, 'stone')).toBeGreaterThan(0);
+    expect(state.buildings[0].progress).toBe(0);
+  });
+});
