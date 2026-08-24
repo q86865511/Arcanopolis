@@ -42,6 +42,7 @@ const BUILDING_DEF_KEYS = [
   'jobs',
   'terrain',
   'enablesTrade',
+  'workTicks',
 ] as const;
 const BUILDING_SIZE_KEYS = ['w', 'h'] as const;
 const BUILDING_TERRAIN_KEYS = ['on', 'near', 'consumes'] as const;
@@ -272,7 +273,7 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素必須是物件，收到 ${JSON.stringify(item)}`);
     }
     rejectUnknownKeys(item, BUILDING_DEF_KEYS, `parseBuildingDefs: 第 ${index} 個元素`);
-    const { id, name, size, cost, production, inputs, housing, jobs, terrain, enablesTrade } = item;
+    const { id, name, size, cost, production, inputs, housing, jobs, terrain, enablesTrade, workTicks } = item;
 
     if (!isNonEmptyString(id)) {
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素的 id 必須是非空字串，收到 ${JSON.stringify(id)}`);
@@ -295,6 +296,13 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
     const validHousing = validateCapacity(housing, 'housing', id);
     const validJobs = validateCapacity(jobs, 'jobs', id);
     const validTerrain = validateBuildingTerrain(terrain, id);
+    // workTicks 必須是正整數：進度以整數 tick 累加，小數或 0 會讓「滿一批」的判定
+    // 要嘛永遠不成立、要嘛一個 tick 連出好幾批。
+    if (workTicks !== undefined && !isPositiveInteger(workTicks)) {
+      throw new Error(
+        `parseBuildingDefs: 建築 "${id}" 的 workTicks 必須是正整數（或省略），收到 ${JSON.stringify(workTicks)}`,
+      );
+    }
     if (enablesTrade !== undefined && typeof enablesTrade !== 'boolean') {
       throw new Error(
         `parseBuildingDefs: 建築 "${id}" 的 enablesTrade 必須是布林值（或省略），收到 ${JSON.stringify(enablesTrade)}`,
@@ -317,6 +325,7 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       jobs: validJobs,
       ...(validTerrain === undefined ? {} : { terrain: validTerrain }),
       ...(enablesTrade === true ? { enablesTrade: true } : {}),
+      ...(workTicks === undefined ? {} : { workTicks }),
     });
   }
 

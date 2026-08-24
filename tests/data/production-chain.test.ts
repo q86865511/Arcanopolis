@@ -159,7 +159,7 @@ describe('加工鏈端到端整合（真實資料表，R5）', () => {
     return parseTerrainEconomy(terrainEconomyJson);
   }
 
-  it('(a) 農場→磨坊→麵包坊：三棟滿編就業，跑 100 tick 後 food 增加，grain/flour 不變負也不失控累積', () => {
+  it('(a) 農場→磨坊→麵包坊：三棟滿編就業，跑滿整條鏈的批次延遲後 food 增加，grain/flour 不變負也不失控累積', () => {
     const defs = realDefs();
     const byId = defsById(defs);
     const state = createInitialState(1);
@@ -171,11 +171,24 @@ describe('加工鏈端到端整合（真實資料表，R5）', () => {
     employ(state, 'bakery1', byId.get('bakery')!.jobs);
     const system = createProductionSystem(defs, realEconomy());
 
-    runTicks(system, state, 100);
+    // 產出改為整批入帳後，三段鏈的首批 food 最快要 3×workTicks=180 tick；跑 400 留餘裕
+    runTicks(system, state, 400);
 
     expect(getResource(state, 'food')).toBeGreaterThan(0);
-    expect(getResource(state, 'grain')).toBeLessThan(50);
-    expect(getResource(state, 'flour')).toBeLessThan(50);
+
+    // 中間產物不得失控累積。整批入帳後，上游一次倒進一批、下游逐 tick 取用，
+    // 中間產物本來就會在 0 與「一批的量」之間來回——所以上界是「一批」而不是接近 0；
+    // 真正要擋的是「下游跟不上、庫存單調成長」，故再多跑一整批確認沒有繼續往上長。
+    const farmBatch = byId.get('farm')!.production.grain * byId.get('farm')!.workTicks!;
+    const millBatch = byId.get('mill')!.production.flour * byId.get('mill')!.workTicks!;
+    const grainAfter400 = getResource(state, 'grain');
+    const flourAfter400 = getResource(state, 'flour');
+    expect(grainAfter400).toBeLessThanOrEqual(farmBatch);
+    expect(flourAfter400).toBeLessThanOrEqual(millBatch);
+
+    runTicks(system, state, 400);
+    expect(getResource(state, 'grain')).toBeLessThanOrEqual(farmBatch);
+    expect(getResource(state, 'flour')).toBeLessThanOrEqual(millBatch);
   });
 
   it('(b) 缺上游：只有磨坊沒有農場 → flour 產出恆為 0，grain 不會變負', () => {
@@ -203,7 +216,7 @@ describe('加工鏈端到端整合（真實資料表，R5）', () => {
     employ(state, 'sawmill1', byId.get('sawmill')!.jobs);
     const system = createProductionSystem(defs, realEconomy());
 
-    runTicks(system, state, 50);
+    runTicks(system, state, 200);
 
     expect(getResource(state, 'plank')).toBeGreaterThan(0);
   });
@@ -223,7 +236,7 @@ describe('加工鏈端到端整合（真實資料表，R5）', () => {
     addResource(state, 'plank', 1000); // 鐵匠鋪所需的木板，直接供應
     const system = createProductionSystem(defs, realEconomy());
 
-    runTicks(system, state, 100);
+    runTicks(system, state, 400);
 
     expect(getResource(state, 'tools')).toBeGreaterThan(0);
   });

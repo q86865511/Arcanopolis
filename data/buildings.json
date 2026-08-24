@@ -2,105 +2,270 @@
   {
     "id": "lumber-camp",
     "name": "伐木場",
-    "size": { "w": 1, "h": 1 },
-    "cost": { "wood": 20, "gold": 10 },
-    "production": { "wood": 2 },
+    "size": {
+      "w": 1,
+      "h": 1
+    },
+    "cost": {
+      "wood": 20,
+      "gold": 10
+    },
+    "production": {
+      "wood": 2
+    },
     "jobs": 2,
-    "terrain": { "near": ["forest"], "consumes": ["forest"] }
+    "terrain": {
+      "near": [
+        "forest"
+      ],
+      "consumes": [
+        "forest"
+      ]
+    },
+    "workTicks": 60
   },
   {
     "id": "quarry",
     "name": "採石場",
-    "size": { "w": 1, "h": 1 },
-    "cost": { "wood": 30, "gold": 15 },
-    "production": { "stone": 2 },
+    "size": {
+      "w": 1,
+      "h": 1
+    },
+    "cost": {
+      "wood": 30,
+      "gold": 15
+    },
+    "production": {
+      "stone": 2
+    },
     "jobs": 2,
-    "terrain": { "on": ["rock"], "consumes": ["rock"] }
+    "terrain": {
+      "on": [
+        "rock"
+      ],
+      "consumes": [
+        "rock"
+      ]
+    },
+    "workTicks": 60
   },
   {
     "id": "farm",
     "name": "農場",
-    "size": { "w": 1, "h": 1 },
-    "cost": { "wood": 25, "gold": 5 },
-    "production": { "grain": 4 },
+    "size": {
+      "w": 1,
+      "h": 1
+    },
+    "cost": {
+      "wood": 25,
+      "gold": 5
+    },
+    "production": {
+      "grain": 4
+    },
     "jobs": 2,
-    "terrain": { "on": ["grass"] }
+    "terrain": {
+      "on": [
+        "grass"
+      ]
+    },
+    "workTicks": 60
   },
   {
     "id": "house",
     "name": "民居",
-    "size": { "w": 1, "h": 1 },
-    "cost": { "wood": 15, "gold": 5 },
+    "size": {
+      "w": 1,
+      "h": 1
+    },
+    "cost": {
+      "wood": 15,
+      "gold": 5
+    },
     "production": {},
     "housing": 4,
-    "terrain": { "on": ["grass", "sand"] }
+    "terrain": {
+      "on": [
+        "grass",
+        "sand"
+      ]
+    }
   },
   {
     "id": "mill",
     "name": "磨坊",
-    "size": { "w": 1, "h": 1 },
-    "cost": { "wood": 30, "stone": 10, "gold": 10 },
-    "production": { "flour": 2 },
-    "inputs": { "grain": 4 },
+    "size": {
+      "w": 1,
+      "h": 1
+    },
+    "cost": {
+      "wood": 30,
+      "stone": 10,
+      "gold": 10
+    },
+    "production": {
+      "flour": 2
+    },
+    "inputs": {
+      "grain": 4
+    },
     "jobs": 2,
-    "terrain": { "on": ["grass"] }
+    "terrain": {
+      "on": [
+        "grass"
+      ]
+    },
+    "workTicks": 60
   },
   {
     "id": "bakery",
     "name": "麵包坊",
-    "size": { "w": 1, "h": 1 },
-    "cost": { "wood": 25, "stone": 15, "gold": 10 },
-    "production": { "food": 4 },
-    "inputs": { "flour": 2 },
+    "size": {
+      "w": 1,
+      "h": 1
+    },
+    "cost": {
+      "wood": 25,
+      "stone": 15,
+      "gold": 10
+    },
+    "production": {
+      "food": 4
+    },
+    "inputs": {
+      "flour": 2
+    },
     "jobs": 2,
-    "terrain": { "on": ["grass"] }
+    "terrain": {
+      "on": [
+        "grass"
+      ]
+    },
+    "workTicks": 60
   },
   {
     "id": "sawmill",
     "name": "鋸木廠",
-    "size": { "w": 1, "h": 1 },
-    "cost": { "wood": 35, "gold": 15 },
-    "production": { "plank": 1 },
-    "inputs": { "wood": 2 },
+    "size": {
+      "w": 1,
+      "h": 1
+    },
+    "cost": {
+      "wood": 35,
+      "gold": 15
+    },
+    "production": {
+      "plank": 1
+    },
+    "inputs": {
+      "wood": 2
+    },
     "jobs": 2,
-    "terrain": { "on": ["grass"] }
+    "terrain": {
+      "on": [
+        "grass"
+      ]
+    },
+    "workTicks": 60
   },
   {
     "id": "mine",
     "name": "礦坑",
-    "size": { "w": 1, "h": 1 },
-    "cost": { "wood": 40, "stone": 20, "gold": 20 },
-    "production": { "iron-ore": 1 },
+    "size": {
+      "w": 1,
+      "h": 1
+    },
+    "cost": {
+      "wood": 40,
+      "stone": 20,
+      "gold": 20
+    },
+    "production": {
+      "iron-ore": 1
+    },
     "jobs": 3,
-    "terrain": { "on": ["rock"], "consumes": ["rock"] }
+    "terrain": {
+      "on": [
+        "rock"
+      ],
+      "consumes": [
+        "rock"
+      ]
+    },
+    "workTicks": 60
   },
   {
     "id": "smelter",
     "name": "冶煉廠",
-    "size": { "w": 1, "h": 1 },
-    "cost": { "stone": 40, "wood": 20, "gold": 25 },
-    "production": { "iron": 1 },
-    "inputs": { "iron-ore": 1, "wood": 1 },
+    "size": {
+      "w": 1,
+      "h": 1
+    },
+    "cost": {
+      "stone": 40,
+      "wood": 20,
+      "gold": 25
+    },
+    "production": {
+      "iron": 1
+    },
+    "inputs": {
+      "iron-ore": 1,
+      "wood": 1
+    },
     "jobs": 3,
-    "terrain": { "on": ["grass"] }
+    "terrain": {
+      "on": [
+        "grass"
+      ]
+    },
+    "workTicks": 60
   },
   {
     "id": "blacksmith",
     "name": "鐵匠鋪",
-    "size": { "w": 1, "h": 1 },
-    "cost": { "stone": 30, "plank": 10, "gold": 20 },
-    "production": { "tools": 1 },
-    "inputs": { "iron": 1, "plank": 1 },
+    "size": {
+      "w": 1,
+      "h": 1
+    },
+    "cost": {
+      "stone": 30,
+      "plank": 10,
+      "gold": 20
+    },
+    "production": {
+      "tools": 1
+    },
+    "inputs": {
+      "iron": 1,
+      "plank": 1
+    },
     "jobs": 2,
-    "terrain": { "on": ["grass"] }
+    "terrain": {
+      "on": [
+        "grass"
+      ]
+    },
+    "workTicks": 60
   },
   {
     "id": "market",
     "name": "市場",
-    "size": { "w": 1, "h": 1 },
-    "cost": { "wood": 40, "stone": 20, "gold": 30 },
+    "size": {
+      "w": 1,
+      "h": 1
+    },
+    "cost": {
+      "wood": 40,
+      "stone": 20,
+      "gold": 30
+    },
     "production": {},
-    "terrain": { "on": ["grass"] },
+    "terrain": {
+      "on": [
+        "grass"
+      ]
+    },
     "enablesTrade": true
   }
 ]

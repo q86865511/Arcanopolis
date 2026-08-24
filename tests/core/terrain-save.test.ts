@@ -43,9 +43,9 @@ describe('R4：GameState 擴充 worldSeed/worldSize/terrainOverrides', () => {
   });
 });
 
-describe('R6：存檔 v4——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3)', () => {
-  it('SAVE_SCHEMA_VERSION = 4（M3.9：新增地形欄位升版）', () => {
-    expect(SAVE_SCHEMA_VERSION).toBe(4);
+describe('R6：存檔 v5——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3/from:4)', () => {
+  it('SAVE_SCHEMA_VERSION = 5（M4.5-W2：建築新增 progress）', () => {
+    expect(SAVE_SCHEMA_VERSION).toBe(5);
   });
 
   it('SAVE_MIGRATIONS 含 from:3 的遷移', () => {
@@ -112,7 +112,7 @@ describe('R6：存檔 v4——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3)', 
     expect(migrated.terrainOverrides).toEqual({ '1,1': { type: 'sand' } });
   });
 
-  it('端到端：手工構造 v3 存檔（無新欄位）→ 預設參數 deserialize 成功、schemaVersion===4、三個新欄位補上', () => {
+  it('端到端：手工構造 v3 存檔（無新欄位）→ 預設參數 deserialize 成功、schemaVersion===5、三個新欄位補上', () => {
     const v3 = {
       schemaVersion: 3,
       tick: 5,
@@ -125,7 +125,7 @@ describe('R6：存檔 v4——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3)', 
 
     const restored = deserializeGameState(JSON.stringify(v3));
 
-    expect(restored.schemaVersion).toBe(4);
+    expect(restored.schemaVersion).toBe(5);
     expect(restored.worldSeed).toBe(777);
     expect(restored.worldSize).toBe(200);
     expect(restored.terrainOverrides).toEqual({});
@@ -146,7 +146,7 @@ describe('R6：存檔 v4——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3)', 
     expect(() => deserializeGameState(JSON.stringify(v3), [])).toThrow();
   });
 
-  it('v1 舊存檔可鏈式遷移到 v4（1→2→3→4 全部套用）', () => {
+  it('v1 舊存檔可鏈式遷移到 v5（1→2→3→4→5 全部套用）', () => {
     const v1 = {
       schemaVersion: 1,
       tick: 5,
@@ -158,7 +158,7 @@ describe('R6：存檔 v4——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3)', 
 
     const restored = deserializeGameState(JSON.stringify(v1));
 
-    expect(restored.schemaVersion).toBe(4);
+    expect(restored.schemaVersion).toBe(5);
     expect(restored.citizens).toEqual([]);
     expect(restored.worldSeed).toBe(12345); // 補自 rngState
     expect(restored.worldSize).toBe(200);
@@ -168,7 +168,7 @@ describe('R6：存檔 v4——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3)', 
     expect(restored.terrainGeneratorVersion).toBe(TERRAIN_GENERATOR_VERSION);
   });
 
-  it('v2 舊存檔（已有 citizens，缺地形欄位）可遷移到 v4', () => {
+  it('v2 舊存檔（已有 citizens，缺地形欄位）可遷移到 v5', () => {
     const v2 = {
       schemaVersion: 2,
       tick: 1,
@@ -181,7 +181,7 @@ describe('R6：存檔 v4——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3)', 
 
     const restored = deserializeGameState(JSON.stringify(v2));
 
-    expect(restored.schemaVersion).toBe(4);
+    expect(restored.schemaVersion).toBe(5);
     expect(restored.citizens).toEqual([{ id: 'c1', home: 'h1', job: null, x: 1, y: 1 }]);
     expect(restored.worldSeed).toBe(42);
     expect(restored.worldSize).toBe(200);

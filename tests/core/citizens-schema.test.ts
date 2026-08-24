@@ -31,13 +31,13 @@ describe('R1：Citizen 型別＋ GameState.citizens', () => {
 });
 
 describe('R2：存檔版本升級至 3（citizens 加入 GameState）', () => {
-  it('SAVE_SCHEMA_VERSION = 4（M3.9：新增地形欄位）', () => {
-    expect(SAVE_SCHEMA_VERSION).toBe(4);
+  it('SAVE_SCHEMA_VERSION = 5（M4.5-W2：建築新增 progress）', () => {
+    expect(SAVE_SCHEMA_VERSION).toBe(5);
   });
 
-  it('SAVE_MIGRATIONS 同時含 from:1（既有 no-op）、from:2（為 raw 補 citizens:[]）與 from:3（M3.9 補地形欄位）', () => {
+  it('SAVE_MIGRATIONS 含 from:1（no-op）、from:2（補 citizens）、from:3（補地形欄位）、from:4（progress 選填放行）', () => {
     const froms = SAVE_MIGRATIONS.map((m) => m.from).sort((a, b) => a - b);
-    expect(froms).toEqual([1, 2, 3]);
+    expect(froms).toEqual([1, 2, 3, 4]);
   });
 
   /** 手工構造的合法 v1 存檔（schemaVersion:1，無 citizens，含一筆 pending addResource）。 */

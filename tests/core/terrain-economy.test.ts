@@ -447,7 +447,7 @@ describe('真實 buildings.json + terrain-economy.json 生產行為', () => {
     system.update(state, { rng: createRng(1), time: timeFromTick(tick) });
   }
 
-  it('farm 蓋在天然草地且滿在職率時每 tick 產 4 grain，不消耗任何地形', () => {
+  it('farm 蓋在天然草地且滿在職率時每批產 4×workTicks grain，不消耗任何地形', () => {
     const farm = realDefs.find((def) => def.id === 'farm')!;
     const coord = naturalTerrain('grass');
     const state = createInitialState(SEED);
@@ -457,10 +457,14 @@ describe('真實 buildings.json + terrain-economy.json 生產行為', () => {
     const system = createProductionSystem(realDefs, realEconomy);
     const beforeOverrides = JSON.stringify(state.terrainOverrides);
 
-    update(system, state, 1);
-    expect(getResource(state, 'grain')).toBe(4);
-    update(system, state, 2);
-    expect(getResource(state, 'grain')).toBe(8);
+    const workTicks = farm.workTicks!;
+    // 產出改為整批入帳：跑滿一批之前資源池不動，滿了才一次進帳 4×workTicks
+    for (let tick = 1; tick < workTicks; tick++) update(system, state, tick);
+    expect(getResource(state, 'grain')).toBe(0);
+    update(system, state, workTicks);
+    expect(getResource(state, 'grain')).toBe(4 * workTicks);
+    for (let tick = 1; tick <= workTicks; tick++) update(system, state, workTicks + tick);
+    expect(getResource(state, 'grain')).toBe(8 * workTicks);
     expect(JSON.stringify(state.terrainOverrides)).toBe(beforeOverrides);
     expect(terrainAt(state, coord.x, coord.y)).toBe('grass');
   });
@@ -476,7 +480,8 @@ describe('真實 buildings.json + terrain-economy.json 生產行為', () => {
 
     update(system, state, 1);
 
-    expect(getResource(state, 'wood')).toBe(2);
+    // 地形仍逐 tick 扣（樹是一 tick 一 tick 砍的），但木材要整批才入帳
+    expect(getResource(state, 'wood')).toBe(0);
     expect(getTerrainResource(state, site.sourceX, site.sourceY, realEconomy)).toBe(
       realEconomy.forestWoodCapacity - 2,
     );
@@ -493,7 +498,7 @@ describe('真實 buildings.json + terrain-economy.json 生產行為', () => {
 
     update(system, state, 1);
 
-    expect(getResource(state, 'stone')).toBe(2);
+    expect(getResource(state, 'stone')).toBe(0); // 整批才入帳
     expect(getTerrainResource(state, coord.x, coord.y, realEconomy)).toBe(realEconomy.rockStoneCapacity - 2);
   });
 
@@ -510,16 +515,23 @@ describe('真實 buildings.json + terrain-economy.json 生產行為', () => {
     overrides['9,10'] = { type: 'grass', resource: 0 }; // 西，已耗盡
     const system = createProductionSystem(realDefs, realEconomy);
 
+    // 地形照樣逐 tick 採乾，但木材尚未湊滿一批，資源池仍是 0
     update(system, state, 1);
-    expect(getResource(state, 'wood')).toBe(2);
+    expect(getResource(state, 'wood')).toBe(0);
     expect(terrainAt(state, 10, 9)).toBe('grass');
     expect(getTerrainResource(state, 11, 10, realEconomy)).toBe(2);
 
     update(system, state, 2);
-    expect(getResource(state, 'wood')).toBe(4);
+    expect(getResource(state, 'wood')).toBe(0);
     expect(terrainAt(state, 11, 10)).toBe('grass');
 
+    // 四鄰皆採乾：有人在崗、原料也夠卻產不出來 → 結算未完成的進度，
+    // 已砍掉的樹不會卡在進度裡消失。總量與逐 tick 產出時相同（2+2=4）。
     update(system, state, 3);
+    expect(getResource(state, 'wood')).toBe(4);
+
+    // 再跑一 tick：進度已歸零，沒有東西可結算，也不會重複入帳
+    update(system, state, 4);
     expect(getResource(state, 'wood')).toBe(4);
     for (const [x, y] of [[10, 9], [11, 10], [10, 11], [9, 10]] as const) {
       expect(getTerrainResource(state, x, y, realEconomy)).toBe(0);

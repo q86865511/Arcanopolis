@@ -18,6 +18,13 @@ export interface BuildingDef {
   cost: Record<string, number>;
   /** 每 tick 產量：資源 id → 數量；無生產則為空物件 */
   production: Record<string, number>;
+  /**
+   * 完成一批生產所需的工時（tick）。省略時用 DEFAULT_WORK_TICKS。
+   * 產出改為整批入帳後，`production` 仍是「滿載時每 tick 的產率」——
+   * 一批的實際產量＝production × workTicks，所以調整 workTicks 只改變產出的顆粒度
+   * 與進度條長度，不改變平均產率。
+   */
+  workTicks?: number;
   /** 每 tick 滿載生產所需原料：資源 id → 正數數量；省略代表不需原料 */
   inputs?: Record<string, number>;
   /** 可容納居民數；資料表省略時由 loader 正規化為 0 */

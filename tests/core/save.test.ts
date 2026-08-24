@@ -17,7 +17,7 @@ import {
 
 describe('R1：GameState 擴充 schemaVersion + pendingCommands', () => {
   it('state.ts 匯出常數 SAVE_SCHEMA_VERSION = 4（M3.9：新增地形欄位升版）', () => {
-    expect(SAVE_SCHEMA_VERSION).toBe(4);
+    expect(SAVE_SCHEMA_VERSION).toBe(5);
   });
 
   it('createInitialState 填入 schemaVersion 與空 pendingCommands', () => {

@@ -155,28 +155,69 @@ export function createProductionSystem(
           inputRatio = Math.min(inputRatio, allocationByResource.get(resourceId) ?? 1);
         }
 
+        // 產出改為整批入帳（M4.5-W2）：每 tick 照常按 jobRatio/inputRatio/地形實產算出
+        // 「這一 tick 做了多少」，但不直接進資源池，而是累積成工時進度；滿一批才一次產出。
+        //
+        // 進度增量以「實產／滿載名目產量」表示，因此一 tick 最多前進 1，一批至少要
+        // workTicks 個 tick。原料與地形仍逐 tick 扣除，所以中斷不會浪費已投入的資源、
+        // 也不會發生「做完整批才發現沒料」；平均產率與逐 tick 產出時完全相同。
         const outputEntries = Object.entries(def.production);
+        const nominalPerTick = outputEntries.reduce((sum, [, amount]) => sum + amount, 0);
+        // 逐產出項各自算實產（地形建築要各自扣地形），不合併後再分攤——
+        // 合併分攤會讓多產出建築的各項比例被抹平，與分批前的行為不一致。
+        const actuals: number[] = [];
         let totalDesired = 0;
         let totalActual = 0;
-        for (const [resourceId, amount] of outputEntries) {
+        for (const [index, [, amount]] of outputEntries.entries()) {
           const desired = amount * jobRatio * inputRatio;
           totalDesired += desired;
           if (def.terrain?.consumes === undefined) {
-            addResource(state, resourceId, desired);
+            actuals[index] = desired;
             totalActual += desired;
             continue;
           }
 
           const source = findTerrainSource(state, def, building.x, building.y, economy);
-          if (source === null) continue;
+          if (source === null) {
+            actuals[index] = 0;
+            continue;
+          }
 
           const actual = consumeTerrainResource(state, source.x, source.y, desired, economy);
+          actuals[index] = actual;
           totalActual += actual;
           if (actual <= 0) continue;
-          addResource(state, resourceId, actual);
 
           if (getTerrainResource(state, source.x, source.y, economy) === 0) {
             state.terrainOverrides[`${source.x},${source.y}`].depletedDay = ctx.time.totalDay;
+          }
+        }
+
+        // 未宣告 workTicks ＝ 不分批：照舊逐 tick 把（可能是分數的）實產直接入帳。
+        // 一批多長屬於各建築的設計數值，依資料驅動鐵則寫在 datauildings.json，
+        // 程式端不預設一個「大家都分批」的常數。
+        const workTicks = def.workTicks;
+        if (workTicks === undefined) {
+          for (const [index, [resourceId]] of outputEntries.entries()) {
+            if (actuals[index] > 0) addResource(state, resourceId, actuals[index]);
+          }
+        } else if (nominalPerTick > 0) {
+          const progress = (building.progress ?? 0) + totalActual / nominalPerTick;
+          building.progress = progress;
+          if (progress >= workTicks) {
+            building.progress = progress - workTicks;
+            for (const [resourceId, amount] of outputEntries) {
+              addResource(state, resourceId, amount * workTicks);
+            }
+          } else if (progress > 0 && totalActual === 0 && jobRatio > 0 && inputRatio > 0) {
+            // 有人在崗、原料也夠，卻一點都產不出來 → 只可能是地形資源採乾了，而且不會自己回來
+            // （森林再生要數天）。此時把未完成的進度按比例結算出去並歸零：那些樹已經砍掉了，
+            // 若一直留在進度裡等一批湊滿，玩家會看到「最後幾棵樹憑空消失」——那是資源被吃掉，
+            // 不是還沒做完。結算後總量與逐 tick 產出時完全相同。
+            building.progress = 0;
+            for (const [resourceId, amount] of outputEntries) {
+              addResource(state, resourceId, amount * progress);
+            }
           }
         }
 

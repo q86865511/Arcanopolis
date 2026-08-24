@@ -247,8 +247,12 @@ describe('runFastForward：CSV 格式（R2）', () => {
 
 describe('runFastForward：正確性（R3）', () => {
   it('單一 lumber-camp → wood 欄隨列嚴格遞增，最後一列 wood ＝ 每 tick 產量 × ticks，finalState.tick ＝ ticks', () => {
-    const ticks = 50;
-    const sampleEvery = 7;
+    // 產出改為整批入帳（M4.5-W2）後，取樣間隔必須對齊一批的工時，否則取樣點會落在
+    // 批次之間而看到持平——那不是產出停了，是還沒湊滿一批。ticks 取 workTicks 的整數倍，
+    // 所以「總產出＝每 tick 產量 × ticks」這個不變式仍然成立。
+    const workTicks = lumberCampDef.workTicks!;
+    const sampleEvery = workTicks;
+    const ticks = workTicks * 5;
     const { csv, finalState } = runFastForward({
       seed: 1,
       ticks,
@@ -337,14 +341,14 @@ describe('runFastForward：fullSim 分支（F5，M3-W3 審查裁決）', () => {
     expect(overridden.finalState.citizens.length).not.toBe(base.finalState.citizens.length);
   });
 
-  it('(c) fullSim 下起始資源正確出現在第一列（wood500/stone200/food100/gold150，即使 buildings 為空）', () => {
+  it('(c) fullSim 下起始資源正確出現在第一列（wood500/stone200/food1200/gold150，即使 buildings 為空）', () => {
     const { csv } = runFastForward({ seed: 1, ticks: 10, sampleEvery: 10, buildings: [], fullSim: true });
     const [header, firstRow] = csvLines(csv);
     const columns = header.split(',');
     const fields = firstRow.split(',');
     expect(fields[0]).toBe('0');
 
-    const expected: Record<string, number> = { wood: 500, stone: 200, food: 100, gold: 150 };
+    const expected: Record<string, number> = { wood: 500, stone: 200, food: 1200, gold: 150 };
     for (const [id, amount] of Object.entries(expected)) {
       const idx = columns.indexOf(id);
       expect(idx).toBeGreaterThanOrEqual(0);

@@ -68,6 +68,9 @@ export function serializeGameState(state: GameState): string {
  *  v3→v4 新增地形欄位 worldSeed/worldSize/terrainOverrides，同樣是「缺欄才補」——
  *  worldSeed 沿用舊檔的 rngState（v3 以前開局時 rngState 即 seed，補這個值最接近原局面），
  *  rngState 也不可用時退回固定值 1（不可用 Date.now/Math.random，決定論要求同一舊檔每次遷移結果相同）。
+ *  v4→v5 為建築新增選填的 progress（本批生產累積工時）——舊檔沒有這個欄位，缺欄即等同 0，
+ *  故遷移原樣放行；升版本號是為了讓「舊檔載入後進度從 0 開始」這件事有明確的版本界線，
+ *  而不是靠欄位存在與否隱性推斷。
  *  deserializeGameState 預設吃這份清單。 */
 export const SAVE_MIGRATIONS: Migration[] = [
   { from: 1, migrate: (raw) => raw },
@@ -154,6 +157,16 @@ export const SAVE_MIGRATIONS: Migration[] = [
       return migrated;
     },
   },
+  {
+    from: 4,
+    migrate: (raw) => {
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        throw new Error(`SAVE_MIGRATIONS(v4→v5): 存檔必須是物件，收到 ${JSON.stringify(raw)}`);
+      }
+      // progress 是選填欄位，缺欄即 0；已有值的一律保留原值，交由 deserializeGameState 驗證。
+      return raw;
+    },
+  }
 ];
 
 /** 依序套用 from=fromVersion..toVersion-1 的遷移；缺任一步即 throw，不部分套用 */
@@ -246,6 +259,12 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
     }
     if (typeof b.x !== 'number' || !Number.isInteger(b.x) || typeof b.y !== 'number' || !Number.isInteger(b.y)) {
       throw new Error(`deserializeGameState: buildings[${index}].x/y 必須是整數，收到 (${b.x}, ${b.y})`);
+    }
+    // progress 選填；有值就必須是非負有限數（可為小數——一 tick 的進度增量本來就是分數）
+    if (b.progress !== undefined && (typeof b.progress !== 'number' || !Number.isFinite(b.progress) || b.progress < 0)) {
+      throw new Error(
+        `deserializeGameState: buildings[${index}].progress 必須是非負有限數值（或省略），收到 ${JSON.stringify(b.progress)}`,
+      );
     }
   }
 
