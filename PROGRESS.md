@@ -2,12 +2,36 @@
 
 ## 目前狀態
 
-**M4.5 生產模型重做完成**（tsc 零錯誤、build 通過）：產出不再是憑空持續累加——
-居民要真的走到工作地才算在職，建築累積工時滿一批才交貨，頭頂的進度條同時當效率指示器。
-demo 世界 20 天糧食由 32392 收斂到約 5900，佈局遠近開始真的影響經濟。
-下一步：使用者實玩驗收 → 決定進 M5 塔防或先打磨。
+**M5-W1 完成，路線已重排**（691 tests 綠、tsc 零錯誤）。使用者實玩後提出七點反饋，
+全部指向「城市經營本身還不夠厚、不夠好看」、無一關於戰鬥，因此塔防往後挪：
+**M5 看得見的城市 → M6 道路與城市規劃 → M7 居民要什麼 → M8 危機事件＋塔防**（原 M5）
+→ M9 公會 → M10 魔法 → M11 種族 → M12 上架。完整路線與 M6 的實作設計見
+`C:\Users\q86865511\.claude\plans\c-users-q86865511-appdata-local-temp-cl-starry-flute.md`。
+下一步：使用者看過海岸線對比圖後裁決大地圖美術方向（2D 像素強化／3D 預算圖／換 3D 引擎），
+再進 M5-W2（資源列與診斷回饋）。
 
 ## 已完成
+
+- [2026-08-24] **M5-W1 看得見的城市：UI 元件層與海岸線過渡**（691 tests，+11）。
+  兩條並行、檔案不相交。
+  **W1a 美術探路**：Codex `$imagegen` 生成 8 張單邊過渡 tile（水面浪花 ×4 方位、
+  沙灘草緣 ×4 方位）與缺失的 `market-01`。新增 `src/render/terrainTiles.ts` 純函數
+  `terrainTextureKeyFor`：由「本格地形 ＋ 四正交鄰格」決定 texture key，多邊臨界時取固定
+  優先序（tl→tr→br→bl）——**渲染必須是 state 的純函數，否則分塊重烘會閃爍**。
+  `TerrainRenderer.bake()` 改用它，並新增 `readTerrainPatch` 把 chunk 外擴一圈的地形
+  一次預讀（否則 terrainAt 呼叫從每格 1 次變 5 次，而它是烘焙成本的大頭；預讀後只多約 6%）。
+  `invalidateTile` 改為連四個鄰格所屬 chunk 一併標髒——過渡讓選圖依賴鄰格，只標自己
+  會在 chunk 交界留下不更新的舊接縫。
+  **修掉現成 bug**：`market` 一直沒有素材，`CityScene` warn 一次後永久略過，
+  市場在畫面上是隱形的；選單第 10 格也是空白縮圖。
+  **W1b UI 元件層**：新增 `src/render/ui/theme.ts`（色票/字體/框線 token，零 Phaser 依賴）
+  與 `ui/draw.ts`（`drawFramedRect`、`uiTextStyle`）。此前同一個黃銅色以七個名字散在四個檔，
+  各檔註解得互相寫「與某某同色」才說得清；`fontFamily/stroke/strokeThickness` 三行在六處
+  逐字重複。五個檔改為引用 token，**測試零修改全綠**（純重構，行為不變）。
+  以三個突變（海岸判斷反轉、方位偏移改錯、沙草交界誤認 forest）驗證新測試非盲測。
+  工具面：`npm run screenshot` 新增 `--center gx,gy`（把鏡頭移到開局視野外驗證渲染）；
+  `scripts/process-terrain-tiles.mjs` 的 pngquant 路徑加 fallback（原本寫死相對路徑，
+  在 git worktree 下會落空）。
 
 - [2026-08-24] **M4.6 實玩前置：存檔接線與封死防護**（680 tests）。實玩驗收前先補掉兩個
   會讓回饋失真的洞。

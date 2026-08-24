@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,6 +17,16 @@ const tileNames = [
   'tile-rock-01.png',
   'tile-ore-01.png',
   'tile-mountain-01.png',
+  // 單邊過渡 tile：檔名後綴是「過渡到另一種地形的那條菱形邊」在螢幕上的方位。
+  // tl=左上邊、tr=右上邊、br=右下邊、bl=左下邊，與 TerrainRenderer 的鄰格對應表一致。
+  'tile-water-shore-tl.png',
+  'tile-water-shore-tr.png',
+  'tile-water-shore-br.png',
+  'tile-water-shore-bl.png',
+  'tile-sand-grass-tl.png',
+  'tile-sand-grass-tr.png',
+  'tile-sand-grass-br.png',
+  'tile-sand-grass-bl.png',
 ]
 
 function findMagick() {
@@ -69,7 +79,10 @@ function createDiamondMask(outputPath) {
 }
 
 const magick = findMagick()
-const pngquant = path.resolve(projectRoot, '..', 'tools', 'pngquant', 'pngquant.exe')
+// git worktree 下 projectRoot 的上一層是 .claude\worktrees，不是工具目錄，寫死的相對路徑
+// 會落空；找不到就退回 PATH 上的 pngquant，主 repo 與 worktree 都跑得起來。
+const pngquantLocal = path.resolve(projectRoot, '..', 'tools', 'pngquant', 'pngquant.exe')
+const pngquant = existsSync(pngquantLocal) ? pngquantLocal : 'pngquant'
 const workDir = mkdtempSync(path.join(tmpdir(), 'arcanopolis-terrain-'))
 const maskPath = path.join(workDir, 'diamond-mask.pgm')
 const opaquePixels = createDiamondMask(maskPath)

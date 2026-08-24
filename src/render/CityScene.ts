@@ -24,6 +24,7 @@ import {
 import { footprintTiles } from '../core/world/occupancy';
 import type { Simulation } from '../core/sim/simulation';
 import type { Building, Citizen, GameState } from '../core/world/state';
+import { UI_COLOR } from './ui/theme';
 
 /** 居民 sprite 錨點原點：底邊中央，與建築一致。 */
 const CITIZEN_ORIGIN_X = 0.5;
@@ -64,8 +65,8 @@ export const CITY_SCENE_KEY = 'city';
 export const SIM_TICK_MS = 100;
 
 /** 進度條配色：底用深墨、填色用與選單選中框同一個黃銅色，全介面一致。 */
-const PROGRESS_BG = 0x16131c;
-const PROGRESS_FILL = 0xd9a441;
+const PROGRESS_BG = UI_COLOR.ink;
+const PROGRESS_FILL = UI_COLOR.brass;
 
 /** 單幀最多補跑幾個 tick。分頁切回來時一次補上千 tick 會直接凍住畫面。 */
 export const MAX_TICKS_PER_FRAME = 5;

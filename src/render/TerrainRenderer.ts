@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { terrainAt, type TerrainType } from '../core/world/terrain';
 import type { GameState } from '../core/world/state';
-import { TERRAIN_TEXTURE_BY_TYPE } from './assets';
+import { EDGE_OFFSETS, terrainTextureKeyFor } from './terrainTiles';
 import { TILE_H, TILE_W, gridToScreen } from './iso';
 import { TERRAIN_DEPTH } from './placement';
 
@@ -123,8 +123,20 @@ export class TerrainRenderer {
     }
   }
 
-  /** 只標記目前有 cache 的 chunk；未烘 chunk 首次出現時自然會讀到最新 core state。 */
+  /**
+   * 只標記目前有 cache 的 chunk；未烘 chunk 首次出現時自然會讀到最新 core state。
+   *
+   * 連四個鄰格所屬的 chunk 一起標髒：地形過渡讓一格的選圖依賴鄰格，變動格落在 chunk
+   * 邊界時，隔壁 chunk 那一排的過渡邊也失效了。只標自己會在 chunk 交界留下一條
+   * 沒更新的舊接縫，而且它只在「剛好改到邊界格」時出現，極難重現。
+   */
   invalidateTile(x: number, y: number): void {
+    if (x < 0 || y < 0 || x >= this.state.worldSize || y >= this.state.worldSize) return;
+    this.markChunkDirty(x, y);
+    for (const { dx, dy } of EDGE_OFFSETS) this.markChunkDirty(x + dx, y + dy);
+  }
+
+  private markChunkDirty(x: number, y: number): void {
     if (x < 0 || y < 0 || x >= this.state.worldSize || y >= this.state.worldSize) return;
     const key = `${Math.floor(x / this.chunkSize)},${Math.floor(y / this.chunkSize)}`;
     if (this.cache.has(key)) this.dirty.add(key);
@@ -161,11 +173,12 @@ export class TerrainRenderer {
       entry.lastUsedFrame = this.frame;
     }
 
+    const patch = this.readTerrainPatch(bounds);
     const images: Phaser.GameObjects.Image[] = [];
     for (let gy = bounds.y0; gy <= bounds.y1; gy++) {
       for (let gx = bounds.x0; gx <= bounds.x1; gx++) {
-        const type = terrainAt(this.state, gx, gy);
-        const textureKey = TERRAIN_TEXTURE_BY_TYPE[type];
+        const type = patch(gx, gy);
+        const textureKey = terrainTextureKeyFor(type, (dx, dy) => patch(gx + dx, gy + dy));
         if (!this.scene.textures.exists(textureKey)) {
           throw new Error(`TerrainRenderer: texture key "${textureKey}" 尚未載入`);
         }
@@ -186,6 +199,33 @@ export class TerrainRenderer {
     this.bakedChunks += 1;
     this.lastBakeMs = performance.now() - startedAt;
     this.totalBakeMs += this.lastBakeMs;
+  }
+
+  /**
+   * 把 chunk 範圍外擴一圈的地形一次讀進陣列，回傳查表函式。
+   *
+   * 為什麼不逐格現查：過渡選圖要看四個鄰格，逐格呼叫會讓 terrainAt 從每格 1 次變 5 次，
+   * 而 terrainAt 是程序生成（sqrt/pow 加兩組 fBm），是烘焙成本的大頭。外擴一圈預讀後
+   * 每格只算一次，總呼叫數只比原本多一圈邊界（64² → 66²，約 +6%）。
+   *
+   * 世界邊界外一律視為 water：地圖邊緣不該長出海岸線，而島嶼地圖的邊緣本來就是水。
+   */
+  private readTerrainPatch(bounds: ChunkBounds): (gx: number, gy: number) => TerrainType {
+    const x0 = bounds.x0 - 1;
+    const y0 = bounds.y0 - 1;
+    const w = bounds.x1 - bounds.x0 + 3;
+    const h = bounds.y1 - bounds.y0 + 3;
+    const size = this.state.worldSize;
+    const cells: TerrainType[] = new Array<TerrainType>(w * h);
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        const gx = x0 + i;
+        const gy = y0 + j;
+        const inside = gx >= 0 && gy >= 0 && gx < size && gy < size;
+        cells[j * w + i] = inside ? terrainAt(this.state, gx, gy) : 'water';
+      }
+    }
+    return (gx, gy) => cells[(gy - y0) * w + (gx - x0)];
   }
 
   private evict(key: string): void {

@@ -18,16 +18,17 @@ import {
   slotAt,
   type SlotRect,
 } from './paletteLayout';
+import { UI_COLOR, UI_FRAME } from './ui/theme';
+import { drawFramedRect, uiTextStyle } from './ui/draw';
 
 /** HUD 色票：與世界的泥土/木頭色系同調，避免純黑方塊壓在像素畫上顯得突兀。 */
-const SLOT_BG = 0x3a2c22;
+const SLOT_BG = UI_COLOR.surface;
 const SLOT_BG_ALPHA = 0.92;
-const SLOT_BORDER = 0x16131c;
-const SLOT_SELECTED = 0xd9a441;
-/** 與 BuildController 的 PREVIEW_BLOCKED_COLOR 同一個「不行」的紅，全遊戲一致。 */
-const SLOT_UNAFFORDABLE = 0xd95763;
-const HOTKEY_COLOR = '#d9a441';
-const HOTKEY_DIM = '#7a7266';
+const SLOT_BORDER = UI_COLOR.ink;
+const SLOT_SELECTED = UI_COLOR.brass;
+const SLOT_UNAFFORDABLE = UI_COLOR.danger;
+const HOTKEY_COLOR = UI_COLOR.brassText;
+const HOTKEY_DIM = UI_COLOR.textDim;
 
 const HOTKEY_LABELS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
 /** 縮圖在格子內留的邊，讓數字有地方站、格子邊框看得出來。 */
@@ -63,24 +64,12 @@ export class BuildingPalette {
       this.register(thumb);
       this.thumbs.push(thumb);
 
-      const hotkey = this.scene.add.text(0, 0, HOTKEY_LABELS[i], {
-        fontFamily: 'monospace',
-        fontSize: '11px',
-        color: HOTKEY_COLOR,
-        stroke: '#000000',
-        strokeThickness: 3,
-      });
+      const hotkey = this.scene.add.text(0, 0, HOTKEY_LABELS[i], uiTextStyle(11, HOTKEY_COLOR));
       this.register(hotkey);
       this.hotkeys.push(hotkey);
     }
 
-    this.pageText = this.scene.add.text(0, 0, '', {
-      fontFamily: 'monospace',
-      fontSize: '11px',
-      color: HOTKEY_DIM,
-      stroke: '#000000',
-      strokeThickness: 3,
-    });
+    this.pageText = this.scene.add.text(0, 0, '', uiTextStyle(11, HOTKEY_DIM));
     this.register(this.pageText);
   }
 
@@ -141,13 +130,14 @@ export class BuildingPalette {
       }
 
       const affordable = this.canAfford(def);
-      this.frames.fillStyle(SLOT_BG, SLOT_BG_ALPHA);
-      this.frames.fillRect(rect.x, rect.y, rect.size, rect.size);
-
       const selected = def.id === this.selectedId;
-      const borderColor = selected ? SLOT_SELECTED : affordable ? SLOT_BORDER : SLOT_UNAFFORDABLE;
-      this.frames.lineStyle(selected ? 2 : 1, borderColor, selected ? 1 : 0.8);
-      this.frames.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.size - 1, rect.size - 1);
+      drawFramedRect(this.frames, rect.x, rect.y, rect.size, rect.size, {
+        fill: SLOT_BG,
+        fillAlpha: SLOT_BG_ALPHA,
+        edge: selected ? SLOT_SELECTED : affordable ? SLOT_BORDER : SLOT_UNAFFORDABLE,
+        edgeAlpha: selected ? 1 : UI_FRAME.slotEdgeAlpha,
+        edgeWidth: selected ? UI_FRAME.selectedEdgeWidth : UI_FRAME.defaultEdgeWidth,
+      });
 
       const key = buildingTextureKey(def.id);
       thumb.setVisible(true);
@@ -159,7 +149,7 @@ export class BuildingPalette {
         thumb.setScale(scale);
         thumb.setPosition(rect.x + rect.size / 2, rect.y + rect.size / 2);
         // 買不起就壓暗，讓可負擔性一眼可分，不必先點進去才知道
-        thumb.setTint(affordable ? 0xffffff : 0x6b6259);
+        thumb.setTint(affordable ? UI_COLOR.thumbNormal : UI_COLOR.thumbDimmed);
       } else {
         thumb.setVisible(false);
       }

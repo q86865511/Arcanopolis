@@ -27,9 +27,19 @@ function parseViewport(text) {
   return { width, height };
 }
 
+/** --center 的格座標。用於把鏡頭移到開局視野以外的地方（海岸線、礦脈）驗證渲染。 */
+function parseCenter(text) {
+  if (text === undefined) return undefined;
+  const match = /^(\d+),(\d+)$/.exec(text);
+  if (match === null) {
+    throw new Error(`screenshot: --center 格式須為 <gx>,<gy>（例 100,20），收到 ${text}`);
+  }
+  return { gx: Number(match[1]), gy: Number(match[2]) };
+}
+
 function parseArgs(argv) {
   const values = new Map();
-  const supported = new Set(['--port', '--wait', '--out', '--viewport']);
+  const supported = new Set(['--port', '--wait', '--out', '--viewport', '--center']);
 
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index];
@@ -55,8 +65,9 @@ function parseArgs(argv) {
   }
 
   const viewport = parseViewport(values.get('--viewport') ?? '1280x720');
+  const center = parseCenter(values.get('--center'));
 
-  return { port, wait, out, viewport };
+  return { port, wait, out, viewport, center };
 }
 
 /** 啟動 vite dev server（子程序），stdout 出現 "Local:"（server ready）才 resolve，逾時或提早結束則 reject */
@@ -134,7 +145,7 @@ function killProcessTree(child) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const { port, wait, out, viewport } = parseArgs(argv);
+  const { port, wait, out, viewport, center } = parseArgs(argv);
   const outPath = resolve(projectRoot, out);
   mkdirSync(dirname(outPath), { recursive: true });
 
@@ -160,6 +171,19 @@ export async function main(argv = process.argv.slice(2)) {
 
     await page.goto(`http://localhost:${port}`, { waitUntil: 'load' });
     await page.waitForTimeout(wait);
+
+    if (center !== undefined) {
+      // TILE_W/TILE_H 與 src/render/iso.ts 的投影同源；.mjs 不能 import TS，故在此重述，
+      // 改了 iso.ts 的投影要記得同步這裡（只影響截圖定位，不影響遊戲）。
+      await page.evaluate(({ gx, gy }) => {
+        const scene = window.__arcanopolisGame?.scene?.getScene?.('city');
+        if (!scene) throw new Error('找不到 city 場景（CITY_SCENE_KEY），無法定位鏡頭');
+        scene.cameras.main.centerOn(((gx - gy) * 64) / 2, ((gx + gy) * 32) / 2 + 16);
+      }, center);
+      // 鏡頭移動後 TerrainRenderer 每幀最多新烘一塊，要留時間把新可視區烘完，
+      // 否則截到的是半張地圖加一片空白。
+      await page.waitForTimeout(2000);
+    }
 
     const hasCanvas = (await page.locator('canvas').count()) > 0;
     if (!hasCanvas || pageErrors.length > 0) {

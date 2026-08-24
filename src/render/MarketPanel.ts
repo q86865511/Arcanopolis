@@ -24,16 +24,18 @@ import {
   rowY,
   type Rect,
 } from './marketLayout';
+import { UI_COLOR, UI_FRAME } from './ui/theme';
+import { drawFramedRect, uiTextStyle } from './ui/draw';
 
-const PANEL_BG = 0x16131c;
+const PANEL_BG = UI_COLOR.ink;
 const PANEL_BG_ALPHA = 0.97;
-const PANEL_EDGE = 0xd9a441;
-const BUTTON_BG = 0x3a2c22;
-const BUTTON_EDGE = 0xd9a441;
-const BUTTON_DISABLED = 0x2a2620;
-const TEXT_COLOR = '#f2efe6';
-const DIM_COLOR = '#7a7266';
-const TITLE_COLOR = '#d9a441';
+const PANEL_EDGE = UI_COLOR.brass;
+const BUTTON_BG = UI_COLOR.surface;
+const BUTTON_EDGE = UI_COLOR.brass;
+const BUTTON_DISABLED = UI_COLOR.surfaceDisabled;
+const TEXT_COLOR = UI_COLOR.text;
+const DIM_COLOR = UI_COLOR.textDim;
+const TITLE_COLOR = UI_COLOR.brassText;
 
 /** 可交易＝資源表有 basePrice；gold 自身沒有價，不會出現在清單裡。 */
 function tradableResources(): ResourceDef[] {
@@ -152,10 +154,12 @@ export class MarketPanel {
     const panel = this.panel;
     const g = this.graphics;
     g.clear();
-    g.fillStyle(PANEL_BG, PANEL_BG_ALPHA);
-    g.fillRect(panel.x, panel.y, panel.w, panel.h);
-    g.lineStyle(1, PANEL_EDGE, 0.7);
-    g.strokeRect(panel.x + 0.5, panel.y + 0.5, panel.w - 1, panel.h - 1);
+    drawFramedRect(g, panel.x, panel.y, panel.w, panel.h, {
+      fill: PANEL_BG,
+      fillAlpha: PANEL_BG_ALPHA,
+      edge: PANEL_EDGE,
+      edgeAlpha: UI_FRAME.panelEdgeAlpha,
+    });
 
     this.title.setPosition(panel.x + PAD_X, panel.y + 12);
     this.title.setVisible(true);
@@ -203,10 +207,11 @@ export class MarketPanel {
   }
 
   private drawButton(g: Phaser.GameObjects.Graphics, rect: Rect, enabled: boolean): void {
-    g.fillStyle(enabled ? BUTTON_BG : BUTTON_DISABLED, 1);
-    g.fillRect(rect.x, rect.y, rect.w, rect.h);
-    g.lineStyle(1, enabled ? BUTTON_EDGE : BUTTON_BG, enabled ? 0.8 : 1);
-    g.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
+    drawFramedRect(g, rect.x, rect.y, rect.w, rect.h, {
+      fill: enabled ? BUTTON_BG : BUTTON_DISABLED,
+      edge: enabled ? BUTTON_EDGE : BUTTON_BG,
+      edgeAlpha: enabled ? UI_FRAME.slotEdgeAlpha : 1,
+    });
   }
 
   private place(index: number, text: string, x: number, y: number, color: string): void {
@@ -218,13 +223,7 @@ export class MarketPanel {
   }
 
   private makeText(content: string, color: string, size: number): Phaser.GameObjects.Text {
-    const text = this.scene.add.text(0, 0, content, {
-      fontFamily: 'monospace',
-      fontSize: `${size}px`,
-      color,
-      stroke: '#000000',
-      strokeThickness: 3,
-    });
+    const text = this.scene.add.text(0, 0, content, uiTextStyle(size, color));
     this.register(text);
     return text;
   }

@@ -2,23 +2,11 @@
 // URL 一律用 new URL(..., import.meta.url) 取得——Vite 在 dev 與 build 都會解析這個模式，
 // 路徑寫死成字面值是必要條件（動態拼接會讓 Vite 靜態分析失效，build 後 404）。
 
-import type { TerrainType } from '../core/world/terrain';
-
 export interface TextureEntry {
   /** Phaser texture key，等於檔名去掉 .png */
   key: string;
   url: string;
 }
-
-/** 地形 texture key（64×32 完整菱形，圖中心即 tileCenter）。 */
-export const TERRAIN_TEXTURE_BY_TYPE: Readonly<Record<TerrainType, string>> = {
-  water: 'tile-water-01',
-  sand: 'tile-sand-01',
-  grass: 'tile-grass-01',
-  forest: 'tile-forest-01',
-  rock: 'tile-rock-01',
-  mountain: 'tile-mountain-01',
-};
 
 export const GAME_TEXTURES: readonly TextureEntry[] = [
   { key: 'tile-grass-01', url: new URL('../../assets/game/tile-grass-01.png', import.meta.url).href },
@@ -30,6 +18,14 @@ export const GAME_TEXTURES: readonly TextureEntry[] = [
   { key: 'tile-rock-01', url: new URL('../../assets/game/tile-rock-01.png', import.meta.url).href },
   { key: 'tile-ore-01', url: new URL('../../assets/game/tile-ore-01.png', import.meta.url).href },
   { key: 'tile-mountain-01', url: new URL('../../assets/game/tile-mountain-01.png', import.meta.url).href },
+  { key: 'tile-water-shore-tl', url: new URL('../../assets/game/tile-water-shore-tl.png', import.meta.url).href },
+  { key: 'tile-water-shore-tr', url: new URL('../../assets/game/tile-water-shore-tr.png', import.meta.url).href },
+  { key: 'tile-water-shore-br', url: new URL('../../assets/game/tile-water-shore-br.png', import.meta.url).href },
+  { key: 'tile-water-shore-bl', url: new URL('../../assets/game/tile-water-shore-bl.png', import.meta.url).href },
+  { key: 'tile-sand-grass-tl', url: new URL('../../assets/game/tile-sand-grass-tl.png', import.meta.url).href },
+  { key: 'tile-sand-grass-tr', url: new URL('../../assets/game/tile-sand-grass-tr.png', import.meta.url).href },
+  { key: 'tile-sand-grass-br', url: new URL('../../assets/game/tile-sand-grass-br.png', import.meta.url).href },
+  { key: 'tile-sand-grass-bl', url: new URL('../../assets/game/tile-sand-grass-bl.png', import.meta.url).href },
   { key: 'lumber-camp-01', url: new URL('../../assets/game/lumber-camp-01.png', import.meta.url).href },
   { key: 'quarry-01', url: new URL('../../assets/game/quarry-01.png', import.meta.url).href },
   { key: 'farm-01', url: new URL('../../assets/game/farm-01.png', import.meta.url).href },
@@ -41,6 +37,7 @@ export const GAME_TEXTURES: readonly TextureEntry[] = [
   { key: 'mine-01', url: new URL('../../assets/game/mine-01.png', import.meta.url).href },
   { key: 'smelter-01', url: new URL('../../assets/game/smelter-01.png', import.meta.url).href },
   { key: 'blacksmith-01', url: new URL('../../assets/game/blacksmith-01.png', import.meta.url).href },
+  { key: 'market-01', url: new URL('../../assets/game/market-01.png', import.meta.url).href },
   { key: 'wall-01', url: new URL('../../assets/game/wall-01.png', import.meta.url).href },
   { key: 'watchtower-01', url: new URL('../../assets/game/watchtower-01.png', import.meta.url).href },
   { key: 'villager-01', url: new URL('../../assets/game/villager-01.png', import.meta.url).href },

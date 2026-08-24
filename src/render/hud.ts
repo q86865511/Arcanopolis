@@ -17,6 +17,8 @@ import { Minimap, type MinimapTile } from './Minimap';
 import type { Simulation } from '../core/sim/simulation';
 import { getResource, type GameState } from '../core/world/state';
 import type { BuildingDef } from '../data/types';
+import { UI_COLOR } from './ui/theme';
+import { uiTextStyle } from './ui/draw';
 
 /** 遠高於任何世界物件（建築 depth 走格座標和，預覽層 PREVIEW_DEPTH）。 */
 export const HUD_DEPTH = 1_000_000;
@@ -26,9 +28,9 @@ export const HUD_DEPTH = 1_000_000;
  *  格子看起來像浮在草皮上而不是坐在面板裡——控制面必須是實心的。 */
 const TOP_BAR_ALPHA = 0.72;
 const BOTTOM_BAR_ALPHA = 0.94;
-const BAR_COLOR = 0x16131c;
+const BAR_COLOR = UI_COLOR.ink;
 /** 下列頂緣的一道細線：把控制面與世界切開，不靠陰影或漸層。 */
-const BAR_EDGE_COLOR = 0xd9a441;
+const BAR_EDGE_COLOR = UI_COLOR.brass;
 /** 上/下資訊列高度（畫面座標）。匯出給 BuildController 用：游標壓在列上時要停用建造預覽/點擊，
  *  否則透過 HUD 文字底下的世界格子仍會被誤觸建造/拆除。 */
 export const TOP_BAR_H = 28;
@@ -41,12 +43,11 @@ const PALETTE_SLOT_COUNT = 10;
 export function bottomBarHeight(width: number): number {
   return paletteBarHeight(fitSlotSize(width, PALETTE_SLOT_COUNT));
 }
-const TEXT_COLOR = '#f2efe6';
-/** 速度指示用的黃銅色，與選單格子的選中框同一個強調色。 */
-const SPEED_COLOR = '#d9a441';
-const SPEED_PAUSED_COLOR = '#d95763';
+const TEXT_COLOR = UI_COLOR.text;
+const SPEED_COLOR = UI_COLOR.brassText;
+const SPEED_PAUSED_COLOR = UI_COLOR.dangerText;
 /** 警告文字色，與拆除預覽、買不起的格子邊框同一個「不行」的紅。 */
-const NOTICE_COLOR = '#d95763';
+const NOTICE_COLOR = UI_COLOR.dangerText;
 
 /** 文字距畫面左緣的內距，與上/下列內文字的垂直內距。 */
 const TEXT_PAD_X = 10;
@@ -94,34 +95,15 @@ export class Hud {
     this.bars = this.scene.add.graphics();
     this.register(this.bars);
 
-    this.resourceText = this.scene.add.text(TEXT_PAD_X, TOP_TEXT_PAD_Y, this.formatResources(), {
-      // 系統 monospace：數字等寬，數值跳動時欄位不會左右抖動
-      fontFamily: 'monospace',
-      fontSize: '15px',
-      color: TEXT_COLOR,
-      stroke: '#000000',
-      strokeThickness: 3,
-    });
+    this.resourceText = this.scene.add.text(TEXT_PAD_X, TOP_TEXT_PAD_Y, this.formatResources(), uiTextStyle(15, TEXT_COLOR));
     this.register(this.resourceText);
 
     // 置中對齊格子列：說明的是格子，靠左會讓兩者看起來各自為政
-    this.selectionText = this.scene.add.text(0, 0, selectHint(0), {
-      fontFamily: 'monospace',
-      fontSize: '14px',
-      color: TEXT_COLOR,
-      stroke: '#000000',
-      strokeThickness: 3,
-    }).setOrigin(0.5, 0);
+    this.selectionText = this.scene.add.text(0, 0, selectHint(0), uiTextStyle(14, TEXT_COLOR)).setOrigin(0.5, 0);
     this.register(this.selectionText);
 
     // 靠右對齊：速度是狀態指示而非常按的控制項，放右側不與左側資源數值搶第一眼
-    this.speedText = this.scene.add.text(0, TOP_TEXT_PAD_Y, speedLabel(this.speed), {
-      fontFamily: 'monospace',
-      fontSize: '14px',
-      color: SPEED_COLOR,
-      stroke: '#000000',
-      strokeThickness: 3,
-    }).setOrigin(1, 0);
+    this.speedText = this.scene.add.text(0, TOP_TEXT_PAD_Y, speedLabel(this.speed), uiTextStyle(14, SPEED_COLOR)).setOrigin(1, 0);
     this.register(this.speedText);
 
     this.palette = new BuildingPalette(this.scene, this.state, HUD_DEPTH + 1, (def) =>

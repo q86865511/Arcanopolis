@@ -15,6 +15,7 @@ import { demolitionWarning } from './demolition';
 import { BUILDING_DEFS, buildingSize } from './defs';
 import { TOP_BAR_H, bottomBarHeight } from './hud';
 import { TILE_H, TILE_W, hitTile, tileCenter, type GridPoint } from './iso';
+import { UI_COLOR } from './ui/theme';
 
 /** 壓在建築之上、HUD 之下：預覽要看得見，但不能蓋掉資源數值。 */
 export const PREVIEW_DEPTH = 900_000;
@@ -22,8 +23,8 @@ export const PREVIEW_DEPTH = 900_000;
 /** 按下與放開的距離小於此值才算「點擊」，否則視為拖曳平移。 */
 export const CLICK_SLOP_PX = 4;
 
-const PREVIEW_OK_COLOR = 0x5ac54f;
-const PREVIEW_BLOCKED_COLOR = 0xd95763;
+const PREVIEW_OK_COLOR = UI_COLOR.ok;
+const PREVIEW_BLOCKED_COLOR = UI_COLOR.danger;
 const PREVIEW_FILL_ALPHA = 0.35;
 const PREVIEW_LINE_ALPHA = 0.9;
 
