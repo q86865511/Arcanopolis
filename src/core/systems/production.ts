@@ -29,6 +29,22 @@ interface TerrainSource {
   y: number;
 }
 
+/**
+ * 居民是否站在該建築的佔格上。座標採精確相等：movement 前進時把座標正規化到 0.1 網格，
+ * 且剩餘距離 <= SPEED 時直接貼齊格中心，因此「已抵達」必然是精確值——這與 movement 自己
+ * 判斷「已在目標格」用的是同一個條件，兩邊不會對同一個居民有不同看法。
+ */
+function isAtWorkplace(
+  citizen: { x: number; y: number },
+  building: { x: number; y: number },
+  def: BuildingDef,
+): boolean {
+  for (const tile of footprintTiles(building.x, building.y, def.size.w, def.size.h)) {
+    if (citizen.x === tile.x && citizen.y === tile.y) return true;
+  }
+  return false;
+}
+
 function isUsableSource(
   state: GameState,
   x: number,
@@ -84,12 +100,27 @@ export function createProductionSystem(
         }
       }
 
-      // 各建築目前在職數，僅計入 job 指向該建築 id 的 citizen
+      // 各建築目前在職數：只計入「已經走到工作地」的 citizen。
+      //
+      // 為什麼要看座標而不是只看 job：被指派到工作不等於人在現場。居民每天上半日往工作地走、
+      // 下半日返家（見 movement system），若只數 job，一名還在路上的居民就已經讓建築滿產能運轉，
+      // 走路動畫變成純裝飾，通勤距離也完全不影響產出。到崗才算數之後，
+      // 有效工時＝上半日扣掉通勤時間，佈局遠近才真正影響經濟。
+      //
+      // 重複 building id 一律保留陣列中第一筆，與 jobs/movement 的解析一致。
+      const buildingById = new Map<string, (typeof state.buildings)[number]>();
+      for (const building of state.buildings) {
+        if (!buildingById.has(building.id)) buildingById.set(building.id, building);
+      }
       const employed = new Map<string, number>();
       for (const citizen of state.citizens) {
-        if (citizen.job !== null) {
-          employed.set(citizen.job, (employed.get(citizen.job) ?? 0) + 1);
-        }
+        if (citizen.job === null) continue;
+        const workplace = buildingById.get(citizen.job);
+        if (workplace === undefined) continue; // job 懸空：交給 jobs system 於下一 tick 重設
+        const def = defsByType.get(workplace.type);
+        if (def === undefined) continue;
+        if (!isAtWorkplace(citizen, workplace, def)) continue;
+        employed.set(citizen.job, (employed.get(citizen.job) ?? 0) + 1);
       }
 
       // 同一 tick 先彙總所有消費者的名目需求。供給不足時，同資源的每位消費者共用

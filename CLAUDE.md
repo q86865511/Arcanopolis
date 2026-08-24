@@ -41,6 +41,9 @@
   不得直接索引 `state.resources`（資源 id 可能與 Object.prototype 成員同名）。
 - `System.update` 必須同步；ctx 僅在該 tick 內有效，不得留存 ctx.rng 跨 tick 使用。
 - 指令一律經 `Simulation.enqueue`（入口驗證），於下一 tick 開頭 FIFO 套用。
+- **在職＝到崗**（M4.5-W1 起）：production 計算在職人數時必須確認 citizen 站在建築 footprint 上，
+  只看 `citizen.job` 不算數。任何新增的「依人力運作」機制都沿用此語義，
+  否則通勤距離會再次與經濟脫鉤。座標比較用精確相等——movement 抵達時會貼齊格中心。
 
 ## Git
 

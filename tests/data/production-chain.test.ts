@@ -124,14 +124,18 @@ describe('data/buildings.json 擴充加工鏈建築（R4）', () => {
 
 // ── R5：真實資料表端到端鏈路整合 ───────────────────────────────────────────────
 
+/** 讓建築滿編：工人放在該建築的格子上——到崗才算在職（見 production system），
+ *  放在 (0,0) 等於全員還在路上，建築產出恆為 0。 */
 function employ(state: GameState, buildingId: string, count: number): void {
+  const workplace = state.buildings.find((b) => b.id === buildingId);
+  if (workplace === undefined) throw new Error(`employ: 找不到建築 ${buildingId}`);
   for (let index = 0; index < count; index++) {
     state.citizens.push({
       id: `${buildingId}-worker-${index}`,
       home: buildingId,
       job: buildingId,
-      x: 0,
-      y: 0,
+      x: workplace.x,
+      y: workplace.y,
     });
   }
 }

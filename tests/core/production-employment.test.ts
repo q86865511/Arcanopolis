@@ -127,8 +127,9 @@ describe('createProductionSystem 依在職率調整產出（R2）', () => {
     state.citizens.push(
       citizen({ id: 'c1', job: 'lc1' }),
       citizen({ id: 'c2', job: 'lc1' }),
-      citizen({ id: 'c3', job: 'q1' }),
-      citizen({ id: 'c4', job: 'q1' }),
+      // quarry 在 (5,5)，工人得站在那裡才算到崗
+      citizen({ id: 'c3', job: 'q1', x: 5, y: 5 }),
+      citizen({ id: 'c4', job: 'q1', x: 5, y: 5 }),
     );
 
     sys.update(state, makeCtx());

@@ -381,8 +381,9 @@ describe('R5：production system 只依 terrain.consumes 消耗地形資源', ()
     const state = createInitialState(1);
     state.buildings.push({ id: 'q1', type: 'quarry-jobs', x: 5, y: 5 });
     state.citizens.push(
-      { id: 'c1', home: 'h', job: 'q1', x: 0, y: 0 },
-      { id: 'c2', home: 'h', job: 'q1', x: 0, y: 0 },
+      // 站在建築格上：到崗才算在職
+      { id: 'c1', home: 'h', job: 'q1', x: 5, y: 5 },
+      { id: 'c2', home: 'h', job: 'q1', x: 5, y: 5 },
     ); // 2/4 在職 → ratio 0.5 → 名目 2.5
     (state.terrainOverrides as Record<string, TerrainOverride>)['5,5'] = { type: 'rock', resource: 10 };
 
@@ -429,12 +430,15 @@ describe('真實 buildings.json + terrain-economy.json 生產行為', () => {
 
   function employ(state: GameState, buildingId: string, count: number): void {
     for (let index = 0; index < count; index++) {
+      const workplace = state.buildings.find((b) => b.id === buildingId);
+      if (workplace === undefined) throw new Error(`找不到建築 ${buildingId}`);
       state.citizens.push({
         id: `${buildingId}-worker-${index}`,
         home: buildingId,
         job: buildingId,
-        x: 0,
-        y: 0,
+        // 到崗才算在職：工人必須站在建築格上
+        x: workplace.x,
+        y: workplace.y,
       });
     }
   }

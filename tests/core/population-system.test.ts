@@ -320,7 +320,7 @@ describe('人口／職業／生產整合（R4）', () => {
     expect(state.citizens.length).toBe(6); // 2 人/日 * 3 日
   });
 
-  it('新居民出生後下個 tick 被 jobs system 自動指派，lumber-camp 隨即開始產出', () => {
+  it('新居民被指派後仍要走到工作地才算在職：人未到崗時產出為 0，到崗後才產出', () => {
     const defs: BuildingDef[] = [
       { id: 'house', name: '民居', size: { w: 1, h: 1 }, cost: {}, production: {}, housing: 5, jobs: 0 },
       {
@@ -348,7 +348,19 @@ describe('人口／職業／生產整合（R4）', () => {
     sim.run(TICKS_PER_DAY);
     expect(getResource(state, 'wood')).toBe(0);
 
-    // 下一 tick：jobs system 把新居民指派到 lumber-camp，production 隨即產出全額。
+    // 下一 tick：jobs system 已把新居民指派到 lumber-camp，但人還在 house1（本 sim 未掛
+    // movement system，居民不會自己移動）。指派不等於在崗，產出仍為 0。
+    sim.tick();
+    expect(state.citizens.some((citizen) => citizen.job === 'lc1')).toBe(true);
+    expect(getResource(state, 'wood')).toBe(0);
+
+    // 把該居民搬到工作地（等同 movement 走完全程），下一 tick 才開始產出全額。
+    for (const citizen of state.citizens) {
+      if (citizen.job === 'lc1') {
+        citizen.x = 5;
+        citizen.y = 5;
+      }
+    }
     sim.tick();
     expect(getResource(state, 'wood')).toBe(5);
   });
