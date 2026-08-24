@@ -39,6 +39,12 @@ npm run dev        # Vite dev server（預設 http://localhost:5173）
 
 其他指令：`npm run test`（Vitest）、`npm run typecheck`（tsc --noEmit）、`npm run build`。
 
+平衡曲線（模擬一位會持續擴建的玩家，輸出 30 天成長曲線）：
+
+```bash
+npm run balance
+```
+
 數值平衡用的 headless 快轉模擬器：
 
 ```bash
