@@ -135,7 +135,7 @@ function fbm(seed: number, x: number, y: number, worldSize: number, cellsAcross:
  *
  * 呼叫端保證 x/y 為整數且在界內（本函數不重複驗證，是兩個公開函數的共用內核）。
  */
-function elevationValueAt(seed: number, worldSize: number, x: number, y: number): number {
+export function elevationValueAt(seed: number, worldSize: number, x: number, y: number): number {
   const half = worldSize / 2;
   const dx = (x + 0.5 - half) / half;
   const dy = (y + 0.5 - half) / half;
