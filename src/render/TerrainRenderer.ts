@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { terrainAt, type TerrainType } from '../core/world/terrain';
 import type { GameState } from '../core/world/state';
 import { EDGE_OFFSETS, terrainTextureKeyFor } from './terrainTiles';
+import { ELEVATION_STEP, MAX_ELEVATION_LEVEL, levelAt } from './elevation';
 import { TILE_H, TILE_W, gridToScreen } from './iso';
 import { TERRAIN_DEPTH } from './placement';
 
@@ -9,6 +10,12 @@ export const TERRAIN_CHUNK_SIZE = 64;
 
 const VIEW_PADDING_TILES = 4;
 const MAX_RETAINED_CHUNKS = 12;
+
+/** chunk RT 上下各留的高度餘裕：上排補畫半格 ＋ 最高三階的位移 ＋ 裙邊下延。 */
+const ELEVATION_PADDING = TILE_H / 2 + MAX_ELEVATION_LEVEL * ELEVATION_STEP;
+
+/** 裙邊（階地側面的土壁）的壓暗 tint：讓側面明顯暗於頂面，立體感來自明暗不是輪廓線。 */
+const SKIRT_TINT = 0x8f8578;
 
 /** 小地圖用的地形代表色（一格一像素）。地形 tile 本身有正式素材，烘焙時不再染色。 */
 export const TERRAIN_TINT: Readonly<Record<TerrainType, number>> = {
@@ -175,20 +182,37 @@ export class TerrainRenderer {
 
     const patch = this.readTerrainPatch(bounds);
     const images: Phaser.GameObjects.Image[] = [];
-    for (let gy = bounds.y0; gy <= bounds.y1; gy++) {
-      for (let gx = bounds.x0; gx <= bounds.x1; gx++) {
-        const type = patch(gx, gy);
-        const textureKey = terrainTextureKeyFor(type, (dx, dy) => patch(gx + dx, gy + dy));
+    // 範圍比 chunk 多畫「上一排」與左右各一格：墊高與裙邊讓一格的像素越出自己的
+    // chunk 矩形，交界區域改由兩側 chunk 各自重複繪製同一格（內容一致、各裁各的界），
+    // 跨 RT 的遮擋就不必依賴 RenderTexture 的加入順序。
+    for (let gy = bounds.y0 - 1; gy <= bounds.y1; gy++) {
+      for (let gx = bounds.x0 - 1; gx <= bounds.x1 + 1; gx++) {
+        const type = patch.type(gx, gy);
+        const level = patch.level(gx, gy);
+        const textureKey = terrainTextureKeyFor(type, (dx, dy) => patch.type(gx + dx, gy + dy));
         if (!this.scene.textures.exists(textureKey)) {
           throw new Error(`TerrainRenderer: texture key "${textureKey}" 尚未載入`);
         }
         const screen = gridToScreen(gx, gy);
-        const image = new Phaser.GameObjects.Image(
-          this.scene,
-          screen.x - bounds.left,
-          screen.y - bounds.top,
-          textureKey,
-        ).setOrigin(0, 0);
+        const drawX = screen.x - bounds.left;
+        const topY = screen.y - bounds.top - level * ELEVATION_STEP;
+
+        // 裙邊：本格比「螢幕前方」的兩個鄰格（右下 gx+1、左下 gy+1）高出幾階，
+        // 就往下鋪幾層壓暗的土 tile 當側壁。多鋪的部分會被同高或更高的前鄰蓋住
+        // （前鄰在迴圈中較晚繪製），所以取兩鄰的較小值即可，不必分側處理。
+        const frontLevel = Math.min(patch.level(gx + 1, gy), patch.level(gx, gy + 1));
+        for (let k = level - frontLevel; k >= 1; k--) {
+          const skirt = new Phaser.GameObjects.Image(
+            this.scene,
+            drawX,
+            topY + k * ELEVATION_STEP,
+            'tile-dirt-01',
+          ).setOrigin(0, 0);
+          skirt.setTint(SKIRT_TINT);
+          images.push(skirt);
+        }
+
+        const image = new Phaser.GameObjects.Image(this.scene, drawX, topY, textureKey).setOrigin(0, 0);
         images.push(image);
       }
     }
@@ -202,30 +226,39 @@ export class TerrainRenderer {
   }
 
   /**
-   * 把 chunk 範圍外擴一圈的地形一次讀進陣列，回傳查表函式。
+   * 把 chunk 範圍外擴兩圈的地形與階層一次讀進陣列，回傳查表函式。
    *
    * 為什麼不逐格現查：過渡選圖要看四個鄰格，逐格呼叫會讓 terrainAt 從每格 1 次變 5 次，
-   * 而 terrainAt 是程序生成（sqrt/pow 加兩組 fBm），是烘焙成本的大頭。外擴一圈預讀後
-   * 每格只算一次，總呼叫數只比原本多一圈邊界（64² → 66²，約 +6%）。
+   * 而 terrainAt 是程序生成（sqrt/pow 加兩組 fBm），是烘焙成本的大頭。預讀後每格只算一次。
+   * 外擴**兩圈**：繪製範圍本身已外擴一格（見 bake 的迴圈註解），那些格的過渡選圖與
+   * 裙邊判定還要再往外看一格鄰居。
    *
-   * 世界邊界外一律視為 water：地圖邊緣不該長出海岸線，而島嶼地圖的邊緣本來就是水。
+   * 世界邊界外一律視為 water／階層 0：地圖邊緣不該長出海岸線，島嶼地圖的邊緣本來就是海。
    */
-  private readTerrainPatch(bounds: ChunkBounds): (gx: number, gy: number) => TerrainType {
-    const x0 = bounds.x0 - 1;
-    const y0 = bounds.y0 - 1;
-    const w = bounds.x1 - bounds.x0 + 3;
-    const h = bounds.y1 - bounds.y0 + 3;
+  private readTerrainPatch(bounds: ChunkBounds): {
+    type: (gx: number, gy: number) => TerrainType;
+    level: (gx: number, gy: number) => number;
+  } {
+    const x0 = bounds.x0 - 2;
+    const y0 = bounds.y0 - 2;
+    const w = bounds.x1 - bounds.x0 + 5;
+    const h = bounds.y1 - bounds.y0 + 5;
     const size = this.state.worldSize;
     const cells: TerrainType[] = new Array<TerrainType>(w * h);
+    const levels = new Int8Array(w * h);
     for (let j = 0; j < h; j++) {
       for (let i = 0; i < w; i++) {
         const gx = x0 + i;
         const gy = y0 + j;
         const inside = gx >= 0 && gy >= 0 && gx < size && gy < size;
         cells[j * w + i] = inside ? terrainAt(this.state, gx, gy) : 'water';
+        levels[j * w + i] = inside ? levelAt(this.state, gx, gy) : 0;
       }
     }
-    return (gx, gy) => cells[(gy - y0) * w + (gx - x0)];
+    return {
+      type: (gx, gy) => cells[(gy - y0) * w + (gx - x0)],
+      level: (gx, gy) => levels[(gy - y0) * w + (gx - x0)],
+    };
   }
 
   private evict(key: string): void {
@@ -243,8 +276,11 @@ export class TerrainRenderer {
     const y1 = Math.min(y0 + this.chunkSize, this.state.worldSize) - 1;
     const left = gridToScreen(x0, y1).x - TILE_W / 2;
     const right = gridToScreen(x1, y0).x + TILE_W / 2;
-    const top = gridToScreen(x0, y0).y;
-    const bottom = gridToScreen(x1, y1).y + TILE_H;
+    // 上下各留一段 padding：墊高的頂排 tile 會畫出原本的上緣（最多 TILE_H/2 的上排補畫
+    // ＋ 3 階位移），底排的裙邊會延伸出原本的下緣。沒有 padding 這些像素會被 RT 裁掉，
+    // 在 chunk 交界露出破洞。
+    const top = gridToScreen(x0, y0).y - ELEVATION_PADDING;
+    const bottom = gridToScreen(x1, y1).y + TILE_H + ELEVATION_PADDING;
     return {
       key: `${cx},${cy}`,
       cx,

@@ -25,6 +25,7 @@ import { footprintTiles } from '../core/world/occupancy';
 import type { Simulation } from '../core/sim/simulation';
 import type { Building, Citizen, GameState } from '../core/world/state';
 import { UI_COLOR } from './ui/theme';
+import { ELEVATION_STEP, elevationOffsetY, floatElevationOffsetY } from './elevation';
 
 /** 居民 sprite 錨點原點：底邊中央，與建築一致。 */
 const CITIZEN_ORIGIN_X = 0.5;
@@ -166,7 +167,8 @@ export class CityScene extends Phaser.Scene {
     const worldSize = this.state.worldSize;
     const left = gridToScreen(0, worldSize - 1).x - TILE_W / 2;
     const right = gridToScreen(worldSize - 1, 0).x + TILE_W / 2;
-    const top = gridToScreen(0, 0).y;
+    // 頂部多留三階位移：墊高的山地會畫在平面投影之上，不留的話鏡頭捲到世界頂端時山被裁掉。
+    const top = gridToScreen(0, 0).y - 3 * ELEVATION_STEP;
     const bottom = gridToScreen(worldSize - 1, worldSize - 1).y + TILE_H;
     this.worldBounds = {
       x: left - margin,
@@ -283,6 +285,7 @@ export class CityScene extends Phaser.Scene {
       if (ratio === null || ratio <= 0) continue;
 
       const anchor = buildingAnchor(building.x, building.y);
+      anchor.y += elevationOffsetY(this.state, building.x, building.y);
       const sprite = this.buildingSprites.get(building.id);
       const rect = barRect(anchor.x, anchor.y, sprite?.displayHeight ?? 0);
       if (
@@ -497,6 +500,7 @@ export class CityScene extends Phaser.Scene {
     }
     const size = buildingSize(building.type);
     const anchor = buildingAnchor(building.x, building.y);
+    anchor.y += elevationOffsetY(this.state, building.x, building.y);
     const sprite = this.add
       .image(anchor.x, anchor.y, key)
       .setOrigin(BUILDING_ORIGIN_X, BUILDING_ORIGIN_Y)
@@ -565,7 +569,10 @@ export class CityScene extends Phaser.Scene {
     }
     const center = tileCenter(citizen.x, citizen.y);
     const offset = citizenOffset(citizen.id);
-    sprite.setPosition(center.x + offset.dx, center.y + CITIZEN_Y_OFFSET + offset.dy);
+    // 高度用雙線性插值：座標 0.1 格步進，取所在格會在跨過階地邊緣的瞬間垂直跳 8px，
+    // 插值讓居民看起來沿斜坡走上去。
+    const lift = floatElevationOffsetY(this.state, citizen.x, citizen.y);
+    sprite.setPosition(center.x + offset.dx, center.y + CITIZEN_Y_OFFSET + offset.dy + lift);
     sprite.setDepth(citizen.x + citizen.y + 0.5);
   }
 }

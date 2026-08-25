@@ -129,6 +129,50 @@ function fbm(seed: number, x: number, y: number, worldSize: number, cellsAcross:
 }
 
 /**
+ * 連續高程值 ∈ 約 [0.11, 1)：徑向衰減的圓頂 ＋ fBm 雜訊。
+ * baseTerrainAt 用它分類地形，elevationLevelAt 用它量化階梯高度——同一份數值，
+ * 保證「山地一定比平原高、水面一定最低」不需要額外對齊。
+ *
+ * 呼叫端保證 x/y 為整數且在界內（本函數不重複驗證，是兩個公開函數的共用內核）。
+ */
+function elevationValueAt(seed: number, worldSize: number, x: number, y: number): number {
+  const half = worldSize / 2;
+  const dx = (x + 0.5 - half) / half;
+  const dy = (y + 0.5 - half) / half;
+  const nd = Math.sqrt(dx * dx + dy * dy);
+  const dome = 1 - Math.pow(nd, FALLOFF_POWER);
+  return NOISE_WEIGHT * fbm(seed, x, y, worldSize, CONTINENT_OCTAVES_ACROSS) + (1 - NOISE_WEIGHT) * dome;
+}
+
+/**
+ * 階梯高度分界（配合 SEA_LEVEL=0.44、SAND_BAND=0.05、MOUNTAIN_LEVEL=0.8）：
+ * 0＝水面與沙灘（貼海平面）、1＝低地平原、2＝高地丘陵、3＝山地。
+ * 0.64 是平原/丘陵的切分，取平地帶（0.49–0.8）的中點偏上，讓丘陵約佔陸地三分之一；
+ * 它**刻意不對齊任何地形分類門檻**——同一種草地可以出現在平原也可以出現在丘陵，
+ * 階地邊緣才會穿過草原形成有趣的地貌，而不是每種地形各據一階。
+ */
+const HILL_LEVEL = 0.64;
+
+/**
+ * 決定性的階梯高度 ∈ {0,1,2,3}，**純粹是視覺屬性**：只由 seed 推導、不吃
+ * terrainOverrides——砍掉森林、採乾岩石都不會讓地面升降。
+ * render 層據此把 tile 與其上的物件墊高（階高由 render 決定），core 玩法不讀它。
+ */
+export function elevationLevelAt(seed: number, worldSize: number, x: number, y: number): number {
+  if (!Number.isInteger(x) || !Number.isInteger(y)) {
+    throw new Error(`elevationLevelAt: x/y 必須是整數，收到 (${x}, ${y})`);
+  }
+  if (x < 0 || y < 0 || x >= worldSize || y >= worldSize) {
+    return 0;
+  }
+  const elevation = elevationValueAt(seed, worldSize, x, y);
+  if (elevation < SEA_LEVEL + SAND_BAND) return 0;
+  if (elevation < HILL_LEVEL) return 1;
+  if (elevation < MOUNTAIN_LEVEL) return 2;
+  return 3;
+}
+
+/**
  * 程序生成的地形：徑向衰減的圓頂 + fBm 雜訊合成高程，再依高程與濕度分類。
  * 越界座標一律回 water（世界之外就是海）。
  *
@@ -147,13 +191,7 @@ export function baseTerrainAt(seed: number, worldSize: number, x: number, y: num
     return 'water';
   }
 
-  const half = worldSize / 2;
-  const dx = (x + 0.5 - half) / half;
-  const dy = (y + 0.5 - half) / half;
-  const nd = Math.sqrt(dx * dx + dy * dy);
-  const dome = 1 - Math.pow(nd, FALLOFF_POWER);
-
-  const elevation = NOISE_WEIGHT * fbm(seed, x, y, worldSize, CONTINENT_OCTAVES_ACROSS) + (1 - NOISE_WEIGHT) * dome;
+  const elevation = elevationValueAt(seed, worldSize, x, y);
 
   if (elevation < SEA_LEVEL) {
     return 'water';

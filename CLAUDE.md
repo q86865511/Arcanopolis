@@ -67,6 +67,12 @@
   ——分塊 RenderTexture 會重烘，選圖不穩定會讓畫面閃爍。多邊臨界時取 `EDGE_OFFSETS` 的固定
   優先序，該陣列順序不可任意調換。
 - 新增依賴鄰格的渲染時，`TerrainRenderer.invalidateTile` 必須連鄰格所屬 chunk 一起標髒。
+- **階梯高度是純視覺屬性**：core 的 `elevationLevelAt`（seed 純函數、不吃 override）給每格
+  0–3 階，render 的 `src\render\elevation.ts` 決定階高（`ELEVATION_STEP`）與所有座標修正。
+  玩法系統（movement/buildable/jobs）**不得讀取階層**——高度影響玩法屬未來獨立裁決。
+  新增任何「畫在格子上」的物件時，y 一律加 `elevationOffsetY`（整數格）或
+  `floatElevationOffsetY`（浮點座標，居民用）；滑鼠拾取一律走 `pickElevatedTile`，
+  不要直接用平面版 `hitTile`——階地會讓平面拾取選到視覺格的後方格。
 
 ## Git
 

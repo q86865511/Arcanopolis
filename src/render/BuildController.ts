@@ -14,8 +14,9 @@ import { buildingsOnPage, wrapPage } from './buildingSelection';
 import { demolitionWarning } from './demolition';
 import { BUILDING_DEFS, buildingSize } from './defs';
 import { TOP_BAR_H, bottomBarHeight } from './hud';
-import { TILE_H, TILE_W, hitTile, tileCenter, type GridPoint } from './iso';
+import { TILE_H, TILE_W, tileCenter, type GridPoint } from './iso';
 import { UI_COLOR } from './ui/theme';
+import { elevationOffsetY, levelAt, pickElevatedTile } from './elevation';
 
 /** 壓在建築之上、HUD 之下：預覽要看得見，但不能蓋掉資源數值。 */
 export const PREVIEW_DEPTH = 900_000;
@@ -236,8 +237,9 @@ export class BuildController {
   /** 滑鼠位置 → 格座標。範圍外也回傳，讓 canBuildAt 判 false 並保留紅色預覽。 */
   private pointerTile(pointer: Phaser.Input.Pointer): GridPoint | null {
     const world = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
-    const { gx, gy } = hitTile(world.x, world.y);
-    return { gx, gy };
+    // 高度感知拾取：階地把頂面畫在平面投影之上，平面版 hitTile 會選到「看起來的格子」
+    // 後方的格。quarry/mine 要蓋在 rock 上而 rock 分布在 1/2 階，這裡不修會放錯位。
+    return pickElevatedTile(world.x, world.y, (gx, gy) => levelAt(this.state, gx, gy));
   }
 
   private canPlace(def: BuildingDef, gx: number, gy: number): boolean {
@@ -264,6 +266,7 @@ export class BuildController {
 
   private drawTileDiamond(gx: number, gy: number, color: number): void {
     const c = tileCenter(gx, gy);
+    c.y += elevationOffsetY(this.state, gx, gy);
     const points = [
       new Phaser.Geom.Point(c.x, c.y - TILE_H / 2),
       new Phaser.Geom.Point(c.x + TILE_W / 2, c.y),
