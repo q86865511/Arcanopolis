@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { terrainAt, type TerrainType } from '../core/world/terrain';
 import type { GameState } from '../core/world/state';
+import { decorPlacementsFor } from './decor';
 import { EDGE_OFFSETS, terrainTextureKeyFor } from './terrainTiles';
 import { ELEVATION_STEP, MAX_ELEVATION_LEVEL, levelAt } from './elevation';
 import { TILE_H, TILE_W, gridToScreen } from './iso';
@@ -189,7 +190,13 @@ export class TerrainRenderer {
       for (let gx = bounds.x0 - 1; gx <= bounds.x1 + 1; gx++) {
         const type = patch.type(gx, gy);
         const level = patch.level(gx, gy);
-        const textureKey = terrainTextureKeyFor(type, (dx, dy) => patch.type(gx + dx, gy + dy));
+        const textureKey = terrainTextureKeyFor(
+          type,
+          (dx, dy) => patch.type(gx + dx, gy + dy),
+          this.state.worldSeed,
+          gx,
+          gy,
+        );
         if (!this.scene.textures.exists(textureKey)) {
           throw new Error(`TerrainRenderer: texture key "${textureKey}" 尚未載入`);
         }
@@ -214,6 +221,21 @@ export class TerrainRenderer {
 
         const image = new Phaser.GameObjects.Image(this.scene, drawX, topY, textureKey).setOrigin(0, 0);
         images.push(image);
+
+        // 裝飾物錨在格中心（vertex 再往下半格），底邊中央對齊：地面小物的「立足點」
+        // 應是格子視覺上的中央，不是頂端菱形角。隨格子一起畫，chunk 接縫由重複繪製自動覆蓋。
+        for (const decor of decorPlacementsFor(this.state.worldSeed, gx, gy, type)) {
+          if (!this.scene.textures.exists(decor.key)) {
+            throw new Error(`TerrainRenderer: texture key "${decor.key}" 尚未載入`);
+          }
+          const decorImage = new Phaser.GameObjects.Image(
+            this.scene,
+            drawX + decor.dx,
+            topY + TILE_H / 2 + decor.dy,
+            decor.key,
+          ).setOrigin(0.5, 1);
+          images.push(decorImage);
+        }
       }
     }
     entry.texture.draw(images);
