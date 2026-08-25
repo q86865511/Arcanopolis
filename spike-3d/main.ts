@@ -14,6 +14,9 @@ import { baseTerrainAt, elevationValueAt, type TerrainType } from '../src/core/w
 const SEA_LEVEL = 0.44;
 /** 高程 → 世界單位的放大係數：山頂（~1.0）比海平面高約 22 格，近 Anno 的山體量感。 */
 const HEIGHT_SCALE = 40;
+/** 山地帶（>0.72）的額外指數拉抬：Anno 的山是美術誇張的，線性高程下山區只是緩丘。 */
+const MOUNTAIN_BOOST_FROM = 0.72;
+const MOUNTAIN_BOOST = 1300; // 實測全圖最高 elevation 僅 0.8254，超出量 ~0.105，平方後要這個量級才抬得出 +14 單位的山
 
 const TERRAIN_COLOR: Record<TerrainType, number> = {
   water: 0x2d6a94, // 海底色（水面另有半透明平面）
@@ -24,7 +27,8 @@ const TERRAIN_COLOR: Record<TerrainType, number> = {
   mountain: 0xb8bcc2,
 };
 
-const { state } = createDemoWorld();
+const world = createDemoWorld();
+const { state } = world;
 const size = state.worldSize;
 const seed = state.worldSeed;
 
@@ -33,7 +37,10 @@ function heightAt(x: number, y: number): number {
   const cy = Math.min(Math.max(y, 0), size - 1);
   const e = elevationValueAt(seed, size, cx, cy);
   // 海面下壓平成淺海底：spike 不需要海溝，讓海岸線出現平緩的入水坡即可
-  return (Math.max(e, SEA_LEVEL - 0.03) - SEA_LEVEL) * HEIGHT_SCALE;
+  const base = (Math.max(e, SEA_LEVEL - 0.03) - SEA_LEVEL) * HEIGHT_SCALE;
+  // 山地帶指數拉抬：平原/丘陵維持緩起伏，山區陡然聳起（二次曲線在銜接處斜率連續為零，不會有折角）
+  const over = Math.max(0, e - MOUNTAIN_BOOST_FROM);
+  return base + over * over * MOUNTAIN_BOOST;
 }
 
 // ── 場景 ──────────────────────────────────────────────────────────────
@@ -42,6 +49,8 @@ scene.background = new THREE.Color(0x1a2130);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.style.margin = '0';
 document.body.appendChild(renderer.domElement);
 
@@ -67,6 +76,8 @@ const terrain = new THREE.Mesh(
   geometry,
   new THREE.MeshLambertMaterial({ vertexColors: true }),
 );
+terrain.receiveShadow = true;
+terrain.castShadow = true; // 山體要能把影子投在自己的背光坡上
 scene.add(terrain);
 
 // 水面：海平面高度的半透明平面
@@ -78,20 +89,74 @@ water.rotation.x = -Math.PI / 2;
 water.position.y = 0.05;
 scene.add(water);
 
-// 建築：core 的 state.buildings 直接放 box + 屋頂（示意，正式版換 KayKit GLB 模型）
-const wallMat = new THREE.MeshLambertMaterial({ color: 0xe8dcc0 });
-const roofMat = new THREE.MeshLambertMaterial({ color: 0xac3232 });
+// 建築：程序化的中世紀小屋（白牆＋木樑＋雙坡屋頂＋煙囪）。
+// 正式版會換 KayKit/Quaternius 的 GLB 模型；spike 用組合幾何證明「風格可控」——
+// lowpoly 半木屋本來就是簡單幾何的組合。
+const wallMat = new THREE.MeshLambertMaterial({ color: 0xe9dfc8 });
+const beamMat = new THREE.MeshLambertMaterial({ color: 0x5b4030 });
+const ROOF_COLORS = [0xac3232, 0xc8a24a, 0x6f7480]; // 陶紅/茅草/石板，呼應 2D 的三種 house
+const chimneyMat = new THREE.MeshLambertMaterial({ color: 0x8f8a84 });
+
+/** 雙坡屋頂：三角柱 BufferGeometry（w=橫向寬、d=進深、h=脊高）。 */
+function gableRoof(w: number, d: number, h: number, color: number): THREE.Mesh {
+  const hw = w / 2;
+  const hd = d / 2;
+  // 兩個山牆三角 + 兩片坡面
+  const vertices = new Float32Array([
+    // 坡面（左）
+    -hw, 0, -hd, 0, h, -hd, 0, h, hd,
+    -hw, 0, -hd, 0, h, hd, -hw, 0, hd,
+    // 坡面（右）
+    hw, 0, -hd, 0, h, hd, 0, h, -hd,
+    hw, 0, -hd, hw, 0, hd, 0, h, hd,
+    // 山牆前後
+    -hw, 0, hd, 0, h, hd, hw, 0, hd,
+    -hw, 0, -hd, hw, 0, -hd, 0, h, -hd,
+  ]);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color }));
+}
+
+function addHouse(gx: number, gy: number, variant: number): void {
+  const wx = gx - size / 2;
+  const wz = gy - size / 2;
+  const base = heightAt(gx, gy);
+  const group = new THREE.Group();
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.7, 0.65), wallMat);
+  body.position.y = 0.35;
+  body.castShadow = true;
+  group.add(body);
+
+  // 半木結構的木樑：四角立柱＋一道橫樑，遠景讀得出「深色線條切割白牆」就夠
+  for (const [bx, bz] of [[-0.38, -0.28], [0.38, -0.28], [-0.38, 0.28], [0.38, 0.28]] as const) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.7, 0.08), beamMat);
+    post.position.set(bx, 0.35, bz);
+    group.add(post);
+  }
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.07, 0.7), beamMat);
+  lintel.position.y = 0.66;
+  group.add(lintel);
+
+  const roof = gableRoof(1.0, 0.8, 0.45, ROOF_COLORS[variant % ROOF_COLORS.length]);
+  roof.position.y = 0.7;
+  roof.castShadow = true;
+  group.add(roof);
+
+  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.35, 0.12), chimneyMat);
+  chimney.position.set(0.22, 0.95, -0.12);
+  group.add(chimney);
+
+  group.position.set(wx, base, wz);
+  // 朝向依格座標決定性微轉，整排房子不會像閱兵
+  group.rotation.y = (hash2(gx, gy) - 0.5) * 0.5;
+  scene.add(group);
+}
+
 for (const building of state.buildings) {
-  const wx = building.x - size / 2;
-  const wz = building.y - size / 2;
-  const base = heightAt(building.x, building.y);
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.0, 0.9), wallMat);
-  body.position.set(wx, base + 0.5, wz);
-  scene.add(body);
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.75, 0.7, 4), roofMat);
-  roof.rotation.y = Math.PI / 4;
-  roof.position.set(wx, base + 1.35, wz);
-  scene.add(roof);
+  addHouse(building.x, building.y, (building.x * 7 + building.y * 13) % 3);
 }
 
 // 樹：森林格抽樣放 lowpoly 樹（決定論 hash，非 Math.random——沿用專案的決定論紀律）
@@ -113,27 +178,46 @@ for (let gy = 0; gy < size; gy += 1) {
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.08 * s, 0.1 * s, 0.5 * s), trunkMat);
     trunk.position.set(wx, base + 0.25 * s, wz);
     scene.add(trunk);
-    const crown = new THREE.Mesh(new THREE.ConeGeometry(0.45 * s, 1.1 * s, 6), crownMat);
-    crown.position.set(wx, base + 1.0 * s, wz);
+    // 兩種樹型混生：針葉錐與闊葉團（低面數二十面體），森林才不是一片複製的三角形
+    const broadleaf = hash2(gx + 11, gy) < 0.4;
+    const crown = broadleaf
+      ? new THREE.Mesh(new THREE.IcosahedronGeometry(0.5 * s, 0), crownMat)
+      : new THREE.Mesh(new THREE.ConeGeometry(0.45 * s, 1.1 * s, 6), crownMat);
+    crown.position.set(wx, base + (broadleaf ? 0.85 : 1.0) * s, wz);
+    crown.castShadow = true;
     scene.add(crown);
   }
 }
 
-// 光：方向光自左上（沿用 art-bible 的光源方向慣例）＋ 環境光
+// 光：方向光自左上（沿用 art-bible 的光源方向慣例）＋ 環境光；投影涵蓋全島
 const sun = new THREE.DirectionalLight(0xfff4e0, 1.6);
-sun.position.set(-1, 1.2, -0.6);
+sun.position.set(-90, 110, -55);
+sun.castShadow = true;
+sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.camera.left = -150;
+sun.shadow.camera.right = 150;
+sun.shadow.camera.top = 150;
+sun.shadow.camera.bottom = -150;
+sun.shadow.camera.far = 500;
+sun.shadow.bias = -0.0005;
 scene.add(sun);
 scene.add(new THREE.AmbientLight(0x8899bb, 0.9));
 
-// 等距視角的正交相機；?view= 切換全島/山區近景
+// 等距視角的正交相機；?view= 切換全島/山區近景/村莊近景
 const view = new URLSearchParams(window.location.search).get('view') ?? 'island';
 const aspect = window.innerWidth / window.innerHeight;
-const zoom = view === 'mountain' ? 24 : 65;
+const zoom = view === 'island' ? 65 : view === 'mountain' ? 28 : 14;
 const camera = new THREE.OrthographicCamera(-zoom * aspect, zoom * aspect, zoom, -zoom, 1, 1000);
 const target =
   view === 'mountain'
-    ? new THREE.Vector3(112 - size / 2, 8, 98 - size / 2)
-    : new THREE.Vector3(0, 0, 0);
+    ? new THREE.Vector3(112 - size / 2, 10, 98 - size / 2)
+    : view === 'town'
+      ? new THREE.Vector3(
+          world.startCenter.x - size / 2,
+          heightAt(world.startCenter.x, world.startCenter.y),
+          world.startCenter.y - size / 2,
+        )
+      : new THREE.Vector3(0, 0, 0);
 camera.position.set(target.x + 60, target.y + 55, target.z + 60);
 camera.lookAt(target);
 
