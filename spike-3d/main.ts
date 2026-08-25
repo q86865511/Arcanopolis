@@ -159,8 +159,127 @@ function addHouse(gx: number, gy: number, variant: number): void {
   scene.add(group);
 }
 
+/** 風車：圓塔身＋錐頂＋四片葉板。 */
+function addWindmill(gx: number, gy: number): void {
+  const base = heightAt(gx, gy);
+  const group = new THREE.Group();
+  const towerMat = new THREE.MeshLambertMaterial({ color: 0xd8cdb4 });
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.42, 1.5, 8), towerMat);
+  tower.position.y = 0.75;
+  tower.castShadow = true;
+  group.add(tower);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.45, 8), roofFabricMat);
+  cap.position.y = 1.7;
+  group.add(cap);
+  for (let i = 0; i < 4; i++) {
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.0, 0.03), beamMat);
+    blade.position.set(0, 0.5, 0.5);
+    const arm = new THREE.Group();
+    arm.add(blade);
+    arm.rotation.z = (i * Math.PI) / 2 + 0.4;
+    arm.position.set(0, 1.45, 0.36);
+    group.add(arm);
+  }
+  group.position.set(gx - size / 2, base, gy - size / 2);
+  scene.add(group);
+}
+
+/** 瞭望塔：細高方塔＋尖頂。 */
+function addTower(gx: number, gy: number): void {
+  const base = heightAt(gx, gy);
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.6, 0.45), stoneMat);
+  body.position.y = 0.8;
+  body.castShadow = true;
+  group.add(body);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.55, 4), roofSlateMat);
+  cap.rotation.y = Math.PI / 4;
+  cap.position.y = 1.85;
+  group.add(cap);
+  group.position.set(gx - size / 2, base, gy - size / 2);
+  scene.add(group);
+}
+
+/** 教堂：長身＋鐘塔＋尖塔頂。 */
+function addChurch(gx: number, gy: number): void {
+  const base = heightAt(gx, gy);
+  const group = new THREE.Group();
+  const nave = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.8, 0.8), wallMat);
+  nave.position.y = 0.4;
+  nave.castShadow = true;
+  group.add(nave);
+  const naveRoof = gableRoof(0.9, 1.7, 0.5, 0xac3232);
+  naveRoof.rotation.y = Math.PI / 2;
+  naveRoof.position.y = 0.8;
+  naveRoof.castShadow = true;
+  group.add(naveRoof);
+  const belfry = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.5, 0.5), wallMat);
+  belfry.position.set(-0.85, 0.75, 0);
+  belfry.castShadow = true;
+  group.add(belfry);
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.9, 4), roofSlateMat);
+  spire.rotation.y = Math.PI / 4;
+  spire.position.set(-0.85, 1.95, 0);
+  group.add(spire);
+  group.position.set(gx - size / 2, base, gy - size / 2);
+  scene.add(group);
+}
+
+/** 農田：棕色田塊＋幾行作物。 */
+function addFarm(gx: number, gy: number): void {
+  const base = heightAt(gx, gy);
+  const group = new THREE.Group();
+  const soil = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.06, 1.2), soilMat);
+  soil.position.y = 0.03;
+  group.add(soil);
+  for (let r = 0; r < 4; r++) {
+    const crop = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 0.12), cropMat);
+    crop.position.set(0, 0.1, -0.42 + r * 0.28);
+    group.add(crop);
+  }
+  group.position.set(gx - size / 2, base, gy - size / 2);
+  group.rotation.y = (hash2(gx, gy) - 0.5) * 0.6;
+  scene.add(group);
+}
+
+const stoneMat = new THREE.MeshLambertMaterial({ color: 0x9a9d9f });
+const roofSlateMat = new THREE.MeshLambertMaterial({ color: 0x5d626e });
+const roofFabricMat = new THREE.MeshLambertMaterial({ color: 0x8a5a3a });
+const soilMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2f });
+const cropMat = new THREE.MeshLambertMaterial({ color: 0x8fae3e });
+
 for (const building of state.buildings) {
   addHouse(building.x, building.y, (building.x * 7 + building.y * 13) % 3);
+}
+
+// 示範城鎮：圍繞起始點在草地上決定論散佈一批建築，讓 3D 版有「城鎮」可比較。
+// 正式版的建築來自玩家放置的 state.buildings；這批只是視覺評估用的填充。
+{
+  const cx0 = Math.round(world.startCenter.x); // startCenter 是浮點（兩格中點），格掃描要整數
+  const cy0 = Math.round(world.startCenter.y);
+  const taken = new Set(state.buildings.map((b) => `${b.x},${b.y}`));
+  let landmarks = 0;
+  for (let dy = -13; dy <= 13; dy++) {
+    for (let dx = -13; dx <= 13; dx++) {
+      const gx = cx0 + dx;
+      const gy = cy0 + dy;
+      if (gx < 1 || gy < 1 || gx >= size - 1 || gy >= size - 1) continue;
+      if (baseTerrainAt(seed, size, gx, gy) !== 'grass') continue;
+      if (taken.has(`${gx},${gy}`)) continue;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 13) continue;
+      const h = hash2(gx * 3 + 1, gy * 5 + 2);
+      // 市中心密、外圍疏
+      const density = dist < 6 ? 0.2 : dist < 10 ? 0.1 : 0.05;
+      if (h > density) continue;
+      const pick = hash2(gx + 31, gy + 17);
+      if (pick < 0.62) addHouse(gx, gy, Math.floor(pick * 100) % 3);
+      else if (pick < 0.8) addFarm(gx, gy);
+      else if (pick < 0.9 && landmarks < 2) { addWindmill(gx, gy); landmarks++; }
+      else if (pick < 0.97) addTower(gx, gy);
+      else addChurch(gx, gy);
+    }
+  }
 }
 
 // 樹：森林格抽樣放 lowpoly 樹（決定論 hash，非 Math.random——沿用專案的決定論紀律）
@@ -210,11 +329,13 @@ scene.add(new THREE.AmbientLight(0x8899bb, 0.9));
 // 等距視角的正交相機；?view= 切換全島/山區近景/村莊近景
 const view = new URLSearchParams(window.location.search).get('view') ?? 'island';
 const aspect = window.innerWidth / window.innerHeight;
-const zoom = view === 'island' ? 65 : view === 'mountain' ? 28 : 14;
+const zoom = view === 'island' ? 65 : view === 'mountain' ? 28 : view === 'coast' ? 18 : 14;
 const camera = new THREE.OrthographicCamera(-zoom * aspect, zoom * aspect, zoom, -zoom, 1, 1000);
 const target =
   view === 'mountain'
     ? new THREE.Vector3(112 - size / 2, 10, 98 - size / 2)
+    : view === 'coast'
+      ? new THREE.Vector3(160 - size / 2, 0, 100 - size / 2)
     : view === 'town'
       ? new THREE.Vector3(
           world.startCenter.x - size / 2,
