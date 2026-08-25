@@ -17,6 +17,15 @@ W4 日夜視覺）→ M6 道路與城市規劃（完整設計已在
 
 ## 已完成
 
+- [2026-08-25] **AoE2 美術 W1 定調重生**（typecheck/703 tests/build 全綠）。
+  art-bible 新增「AoE2 北極星定調」段（暗橄欖/高雜色/寫實偏暗），地形與建築前綴
+  補色調指令（DARK REALISTIC TONE 段）。兩輪生圖共 9 張：grass×3（01 走到 v5、02 v3、
+  03 v5）、forest×2（v6/v5）、water/ore 順手重生（舊版純色→柔和色斑）。
+  第一輪 grass-01 的孤立亮斑與 grass-03 的單一大團塊鋪排成陣列，第二輪以
+  「亮部柔和連續／小型多樣均佈」修正通過。中心均色 (109,172,52)→(84,89,39)。
+  Minimap 代表色同步取新素材實際均色（TerrainRenderer 的 TERRAIN_TINT 查為死碼未動）。
+  驗收：verify-terrain-tiles（grass-02/03、forest×2 過標，grass-01 11.6 略低但 5×5
+  目視通過）、verify-terrain-seams holes=0、實機截圖前後對比交使用者確認色調中。
 - [2026-08-25] **美術方向評估與定案：AoE2 北極星**（703 tests 全程綠）。使用者以 Anno 2070
   截圖提出「山要有真坡度、房與船要立體」，一路評估六個方向、每個都有實跑 spike 與截圖：
   (1) 2D 階梯 tile（已實裝，被評「還是平的」）；(2) 2D 大型山體 sprite（合成 mockup，
@@ -340,9 +349,7 @@ W4 日夜視覺）→ M6 道路與城市規劃（完整設計已在
   生圖走 codex-imagegen＋三支後處理腳本，鋪排驗收跑 `verify-terrain-tiles.mjs`（判準見
   art-bible「地形 tile 的驗收」——禁方向性紋理、禁高對比地標、5×5 目視不可省）。
 
-  - **W1 定調重生**：art-bible 新增「AoE2 北極星」定調段（暗橄欖草地、高雜色、寫實偏暗；
-    現行 tile 偏亮偏卡通是照 DB32 鮮綠生的）。重生 grass ×3／forest ×2 到新定調，
-    迭代至鋪排通過＋與 AoE2 截圖並排比對色調。驗收：verify + 5×5 目視 + 實機截圖。
+  - ~~W1 定調重生~~ 已完成（2026-08-25，見已完成區；使用者色調確認中）。
   - **W2 變體混鋪＋裝飾散佈**：`terrainTextureKeyFor` 加決定論變體選擇（同地形依格座標
     hash 挑 grass-01/02/03，素材已登錄在 assets.ts）；新增 DecorRenderer 把 12 張
     `decor-*` 裝飾物決定論散佈到草地/沙地（視野裁切；密度可調；車轍太淡可趁機重生）。
