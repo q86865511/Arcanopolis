@@ -15,9 +15,6 @@ const MAX_RETAINED_CHUNKS = 12;
 /** chunk RT 上下各留的高度餘裕：上排補畫半格 ＋ 最高三階的位移 ＋ 裙邊下延。 */
 const ELEVATION_PADDING = TILE_H / 2 + MAX_ELEVATION_LEVEL * ELEVATION_STEP;
 
-/** 裙邊（階地側面的土壁）的壓暗 tint：讓側面明顯暗於頂面，立體感來自明暗不是輪廓線。 */
-const SKIRT_TINT = 0x8f8578;
-
 /** 小地圖用的地形代表色（一格一像素）。地形 tile 本身有正式素材，烘焙時不再染色。 */
 export const TERRAIN_TINT: Readonly<Record<TerrainType, number>> = {
   water: 0x4f79a8,
@@ -205,17 +202,18 @@ export class TerrainRenderer {
         const topY = screen.y - bounds.top - level * ELEVATION_STEP;
 
         // 裙邊：本格比「螢幕前方」的兩個鄰格（右下 gx+1、左下 gy+1）高出幾階，
-        // 就往下鋪幾層壓暗的土 tile 當側壁。多鋪的部分會被同高或更高的前鄰蓋住
+        // 就往下鋪幾層坡面 tile 當側壁。多鋪的部分會被同高或更高的前鄰蓋住
         // （前鄰在迴圈中較晚繪製），所以取兩鄰的較小值即可，不必分側處理。
+        // 坡面 tile 自帶左亮右暗光影：每層只露出下緣兩條邊帶，bl 邊帶取到受光半、
+        // br 邊帶取到背光半，等效於分側選圖而不需兩張方位素材。
         const frontLevel = Math.min(patch.level(gx + 1, gy), patch.level(gx, gy + 1));
         for (let k = level - frontLevel; k >= 1; k--) {
           const skirt = new Phaser.GameObjects.Image(
             this.scene,
             drawX,
             topY + k * ELEVATION_STEP,
-            'tile-dirt-01',
+            'tile-slope-01',
           ).setOrigin(0, 0);
-          skirt.setTint(SKIRT_TINT);
           images.push(skirt);
         }
 

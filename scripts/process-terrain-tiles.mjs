@@ -59,6 +59,9 @@ const tileNames = [
   'tile-sand-grass-tr.png',
   'tile-sand-grass-br.png',
   'tile-sand-grass-bl.png',
+  // 階地側壁（W3 斜坡）：raw 自帶左亮右暗光影，裙邊疊層時下緣兩條邊帶分別呈現
+  // bl（受光）/br（背光）坡面，取代舊的 dirt+tint 垂直土壁。
+  { raw: 'tile-slope-A.png', out: 'tile-slope-01.png' },
 ]
 
 function findMagick() {
