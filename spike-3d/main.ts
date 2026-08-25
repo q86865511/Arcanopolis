@@ -8,6 +8,10 @@
 // URL 參數 ?view=island（全島）| mountain（山區近景）。
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPixelatedPass } from 'three/examples/jsm/postprocessing/RenderPixelatedPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { createDemoWorld } from '../src/render/demoWorld';
 import { baseTerrainAt, elevationValueAt, type TerrainType } from '../src/core/world/terrain';
 
@@ -221,6 +225,39 @@ const target =
 camera.position.set(target.x + 60, target.y + 55, target.z + 60);
 camera.lookAt(target);
 
-renderer.render(scene, camera);
+// ?px=N 開啟「3D 像素風」：低解析度渲染 + nearest 放大 + 法線/深度邊緣描邊。
+// 幾何、光影、坡度全是真 3D，畫面卻是像素畫——像素美學與 3D 地形可以同時要。
+const px = Number(new URLSearchParams(window.location.search).get('px') ?? '0');
+if (px >= 1) {
+  // 像素畫的三要素：低解析度取樣（顆粒）、有限色階（色塊）、硬邊陰影。
+  // 柔陰影＋連續漸層在像素化後仍是「糊的 3D」，量化才把畫面變成一塊塊的色面。
+  const composer = new EffectComposer(renderer);
+  const pixelPass = new RenderPixelatedPass(px, scene, camera);
+  pixelPass.normalEdgeStrength = 0.4; // 法線邊緣描邊：呼應 art-bible 的 1px outline 精神
+  pixelPass.depthEdgeStrength = 0.5;
+  composer.addPass(pixelPass);
+  composer.addPass(new OutputPass());
+  // 亮度量化、保色相，且放在 OutputPass（linear→sRGB）之後。
+  // 第一版在 linear 空間對 RGB 各通道獨立取整：灰色三通道各落到不同階，
+  // 硬生出詭異的藍色山影與黃綠環帶。像素畫的實際做法是「同色相分幾個明度階」，
+  // 對亮度量化再等比縮放原色即可。
+  const posterize = new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, steps: { value: 6.0 } },
+    vertexShader:
+      'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader:
+      'uniform sampler2D tDiffuse; uniform float steps; varying vec2 vUv;\n' +
+      'void main() {\n' +
+      '  vec4 c = texture2D(tDiffuse, vUv);\n' +
+      '  float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));\n' +
+      '  float ql = (floor(l * steps) + 0.5) / steps;\n' +
+      '  gl_FragColor = vec4(c.rgb * (ql / max(l, 1e-4)), c.a);\n' +
+      '}',
+  });
+  composer.addPass(posterize);
+  composer.render();
+} else {
+  renderer.render(scene, camera);
+}
 // 給截圖工具一個穩定的完成訊號
 (window as unknown as Record<string, unknown>).__spikeReady = true;
