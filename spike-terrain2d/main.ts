@@ -24,13 +24,13 @@ const MOUNTAIN_BOOST_PX = 2600;
 const TILE_W = 64;
 const TILE_H = 32;
 
-/** 分層畫序：後層蓋前層。顏色取 DB32 系（與建築素材同一調色盤家族）。 */
+/** 分層畫序：後層蓋前層。v4 改暖調——中世紀城鄉的橄欖綠與土色，不是桌遊的鮮綠。 */
 const LAYERS: { type: TerrainType; fill: string; edge: string }[] = [
-  { type: 'sand', fill: '#d9b678', edge: '#b99455' },
-  { type: 'grass', fill: '#71a944', edge: '#57893a' },
-  { type: 'rock', fill: '#9096a0', edge: '#6f7480' },
-  { type: 'forest', fill: '#3e7a3a', edge: '#2e5c2e' },
-  { type: 'mountain', fill: '#c9cdd4', edge: '#8b9299' },
+  { type: 'sand', fill: '#d3b070', edge: '#ab8a4e' },
+  { type: 'grass', fill: '#8a9e4d', edge: '#6d8140' },
+  { type: 'rock', fill: '#98948c', edge: '#736f68' },
+  { type: 'forest', fill: '#4d6e35', edge: '#3a5429' },
+  { type: 'mountain', fill: '#c2bfb6', edge: '#8d897f' },
 ];
 
 const world = createDemoWorld();
@@ -266,40 +266,163 @@ for (let layer = 0; layer < LAYERS.length; layer++) {
   ctx.imageSmoothingEnabled = false;
 }
 
-// 疊上現有建築像素 sprite：驗證「新地形風格與既有建築」的融合度
-const SPRITES = ['house-01', 'house-02', 'mill-01', 'bakery-01', 'farm-01', 'blacksmith-01'];
+// ── 中世紀城鄉元素（v4）────────────────────────────────────────────────
+function hashXY(x: number, y: number): number {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263)) | 0;
+  h = ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+  return h;
+}
+
+/** 畫一個對齊格子的菱形（田塊/格線都用它）。 */
+function cellPath(gx: number, gy: number): Path2D {
+  const path = new Path2D();
+  const corners: [number, number][] = [[gx, gy], [gx + 1, gy], [gx + 1, gy + 1], [gx, gy + 1]];
+  corners.forEach(([fx, fy], i) => {
+    const [px, py] = toScreen(fx, fy);
+    if (i === 0) path.moveTo(px, py);
+    else path.lineTo(px, py);
+  });
+  path.closePath();
+  return path;
+}
+
+// 田野拼布：村莊外圍的環帶上，格狀田塊兩色交錯——中世紀城鄉的「格」
+// 本來就以田地的形式存在，這是「保留格子要素」最自然的方式。
+const FIELD_COLORS = ['#c2a355', '#a58a49', '#b5975c', '#8f9b52'];
+for (let dy = -9; dy <= 9; dy++) {
+  for (let dx = -9; dx <= 9; dx++) {
+    const gx = centerX + dx;
+    const gy = centerY + dy;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 3.5 || dist > 9) continue;
+    if (typeAt(gx, gy) !== 'grass') continue;
+    if (hashXY(gx * 5 + 3, gy * 7 + 1) > 0.4) continue;
+    const path = cellPath(gx, gy);
+    ctx.fillStyle = FIELD_COLORS[Math.floor(hashXY(gx, gy) * FIELD_COLORS.length)];
+    ctx.fill(path);
+    ctx.strokeStyle = 'rgba(90,70,40,0.55)';
+    ctx.lineWidth = 1.5 * scale;
+    ctx.stroke(path);
+  }
+}
+
+// 建造格線：村莊核心區淡淡的等距格——遊戲的放置對位要素在畫面上保留
+ctx.strokeStyle = 'rgba(60,50,30,0.10)';
+ctx.lineWidth = 1;
+for (let dy = -4; dy <= 4; dy++) {
+  for (let dx = -4; dx <= 4; dx++) {
+    if (typeAt(centerX + dx, centerY + dy) !== 'grass') continue;
+    ctx.stroke(cellPath(centerX + dx, centerY + dy));
+  }
+}
+
+// 建築選址：核心區決定論散佈，彼此不相鄰（上一版擠成一團）
+const SPRITES = ['house-01', 'house-02', 'mill-01', 'bakery-01', 'house-03', 'blacksmith-01', 'tavern-01'];
 const buildingSpots: [number, number, string][] = [];
 {
+  const taken = new Set<string>();
   let i = 0;
-  for (let dy = -8; dy <= 8 && buildingSpots.length < 14; dy++) {
-    for (let dx = -8; dx <= 8 && buildingSpots.length < 14; dx++) {
+  for (let dy = -4; dy <= 4 && buildingSpots.length < 9; dy++) {
+    for (let dx = -4; dx <= 4 && buildingSpots.length < 9; dx++) {
       const gx = centerX + dx;
       const gy = centerY + dy;
       if (typeAt(gx, gy) !== 'grass') continue;
-      let h = (Math.imul(gx, 374761393) + Math.imul(gy, 668265263)) | 0;
-      h = ((h ^ (h >>> 15)) >>> 0) / 4294967296;
-      if (h > 0.09) continue;
+      if (hashXY(gx, gy) > 0.3) continue;
+      // 建築 sprite 寬 2 格，間距要到曼哈頓半徑 2 視覺上才不會貼在一起
+      let free = true;
+      for (let oy = -2; oy <= 2 && free; oy++) {
+        for (let ox = -2; ox <= 2 && free; ox++) {
+          if (taken.has(`${gx + ox},${gy + oy}`)) free = false;
+        }
+      }
+      if (!free) continue;
+      taken.add(`${gx},${gy}`);
       buildingSpots.push([gx, gy, SPRITES[i % SPRITES.length]]);
       i++;
     }
   }
 }
-let pending = buildingSpots.length;
-if (pending === 0) done();
-for (const [gx, gy, name] of buildingSpots) {
-  const img = new Image();
-  img.onload = () => {
-    const [px, py] = toScreen(gx, gy);
-    const w = img.width * 2 * scale;
-    const h = img.height * 2 * scale;
-    ctx.drawImage(img, px - w / 2, py + TILE_H * scale - h, w, h);
-    if (--pending === 0) done();
-  };
-  img.onerror = () => {
-    if (--pending === 0) done();
-  };
-  img.src = new URL(`../assets/game/${name}.png`, import.meta.url).href;
+
+// 泥土路：村中心廣場向每棟建築的土色路徑——城鄉感的動線
+{
+  const [cx, cy] = toScreen(centerX, centerY);
+  ctx.strokeStyle = '#93744a';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 11 * scale;
+  for (const [gx, gy] of buildingSpots) {
+    const [bx, by] = toScreen(gx + 0.5, gy + 1);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    // 微彎的二次曲線比直線自然
+    ctx.quadraticCurveTo((cx + bx) / 2 + 12, (cy + by) / 2 - 8, bx, by);
+    ctx.stroke();
+  }
+  // 廣場
+  ctx.fillStyle = '#ab8c5e';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, 26 * scale, 14 * scale, 0, 0, Math.PI * 2);
+  ctx.fill();
 }
+
+// 城寨：村莊東北的高地上，用現有的 wall-01/watchtower-01 素材組一座小城堡
+const castleSpots: [number, number, string][] = [];
+{
+  // 固定在村莊東北的空地（動態搜尋會掉進森林區找不到落點，spike 不值得為此糾結）
+  const best: [number, number] = [centerX + 7, centerY - 5];
+  {
+    const [bx, by] = best;
+    // 城丘底座：先畫一座灰色高台，城牆與角樓站在上面才有「堡」的氣勢
+    const [hx, hy] = toScreen(bx + 0.5, by + 0.5);
+    ctx.fillStyle = '#9a968c';
+    ctx.strokeStyle = '#736f68';
+    ctx.lineWidth = 2.5 * scale;
+    ctx.beginPath();
+    ctx.ellipse(hx, hy, 120 * scale, 66 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // 角樓四座＋城牆段圍出方寨，中央主樓
+    castleSpots.push(
+      [bx - 1, by - 1, 'watchtower-01'],
+      [bx + 1, by - 1, 'watchtower-01'],
+      [bx, by - 1, 'wall-01'],
+      [bx - 1, by, 'wall-01'],
+      [bx + 1, by, 'wall-01'],
+      [bx - 1, by + 1, 'watchtower-01'],
+      [bx + 1, by + 1, 'watchtower-01'],
+      [bx, by + 1, 'wall-01'],
+      [bx, by, 'tavern-01'],
+    );
+  }
+}
+
+// 疊 sprite：先遠後近（畫面 y 序）確保遮擋正確；城堡與村莊建築一起排序
+const allSprites = [...buildingSpots, ...castleSpots].sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+let pending = allSprites.length;
+if (pending === 0) done();
+const cache = new Map<string, HTMLImageElement>();
+function drawSprite(gx: number, gy: number, img: HTMLImageElement): void {
+  const [px, py] = toScreen(gx + 0.5, gy);
+  const w = img.width * 2 * scale;
+  const h = img.height * 2 * scale;
+  ctx.drawImage(img, px - w / 2, py + (TILE_H / 2) * scale - h, w, h);
+}
+(async () => {
+  for (const [gx, gy, name] of allSprites) {
+    let img = cache.get(name);
+    if (img === undefined) {
+      img = new Image();
+      img.src = new URL(`../assets/game/${name}.png`, import.meta.url).href;
+      await new Promise((resolve) => {
+        img!.onload = resolve;
+        img!.onerror = resolve;
+      });
+      cache.set(name, img);
+    }
+    if (img.width > 0) drawSprite(gx, gy, img);
+    pending--;
+  }
+  done();
+})();
 
 function done(): void {
   (window as unknown as Record<string, unknown>).__spikeReady = true;
