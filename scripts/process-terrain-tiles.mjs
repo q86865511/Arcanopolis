@@ -51,14 +51,16 @@ const tileNames = [
   { raw: 'tile-mountain-03-v2.png', out: 'tile-mountain-03.png' },
   // 單邊過渡 tile：檔名後綴是「過渡到另一種地形的那條菱形邊」在螢幕上的方位。
   // tl=左上邊、tr=右上邊、br=右下邊、bl=左下邊，與 TerrainRenderer 的鄰格對應表一致。
-  'tile-water-shore-tl.png',
-  'tile-water-shore-tr.png',
-  'tile-water-shore-br.png',
-  'tile-water-shore-bl.png',
-  'tile-sand-grass-tl.png',
-  'tile-sand-grass-tr.png',
-  'tile-sand-grass-br.png',
-  'tile-sand-grass-bl.png',
+  // 2026-08-25 W1 色調債：v2 依 AoE2 定調重生——水半換深藍綠(43,74,78)、草半換暗橄欖，
+  // 對齊重生後的 water-01/grass-01。
+  { raw: 'tile-water-shore-tl-v2.png', out: 'tile-water-shore-tl.png' },
+  { raw: 'tile-water-shore-tr-v2.png', out: 'tile-water-shore-tr.png' },
+  { raw: 'tile-water-shore-br-v2.png', out: 'tile-water-shore-br.png' },
+  { raw: 'tile-water-shore-bl-v2.png', out: 'tile-water-shore-bl.png' },
+  { raw: 'tile-sand-grass-tl-v2.png', out: 'tile-sand-grass-tl.png' },
+  { raw: 'tile-sand-grass-tr-v2.png', out: 'tile-sand-grass-tr.png' },
+  { raw: 'tile-sand-grass-br-v2.png', out: 'tile-sand-grass-br.png' },
+  { raw: 'tile-sand-grass-bl-v2.png', out: 'tile-sand-grass-bl.png' },
   // 階地側壁（W3 斜坡）：raw 自帶左亮右暗光影，裙邊疊層時下緣兩條邊帶分別呈現
   // bl（受光）/br（背光）坡面，取代舊的 dirt+tint 垂直土壁。
   { raw: 'tile-slope-A.png', out: 'tile-slope-01.png' },
