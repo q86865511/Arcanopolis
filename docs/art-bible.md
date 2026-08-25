@@ -94,6 +94,9 @@ object in the middle, so that tiling many copies shows no repeating pattern.
 DARK REALISTIC TONE IS MANDATORY: colour mood of classic Age of Empires II terrain -
 dark olive greens and muted earthy tones, low saturation, overall slightly dark;
 never bright cartoon greens or candy-saturated colours.
+UNIFORM BRIGHTNESS TO EVERY EDGE: absolutely no vignette, no shading, no shadow and no
+highlight concentrated near any edge of the diamond; the average brightness within 100
+pixels of every edge must equal the average brightness of the centre.
 ```
 
 三處要求各自對應一個實測缺陷（2026-08-24 修訂）：
@@ -103,6 +106,11 @@ never bright cartoon greens or candy-saturated colours.
   不講清楚這件事，AI 會畫細雜訊，而細雜訊降採樣後平均回純色——舊 grass 成品的中央標準差
   只有 2.9 就是這樣來的。
 - **NO CENTRED MOTIF**：居中主體是鋪排出現壁紙感的唯一來源（舊 mountain 每格一座同樣的山）。
+- **UNIFORM BRIGHTNESS TO EVERY EDGE**（2026-08-25 W2 加入）：AI 常在菱形邊緣畫「柔性陰影邊」
+  （非硬描邊，erode 12 清不掉；實測 grass-03 v5 上緣不透明像素比中央暗 27%）。鋪排時菱形
+  界像素交錯歸屬，暗邊變成深色虛線網格。後處理深侵蝕救不動（外擴回填會把邊緣附近的
+  亮暗不均放大成亮虛線），只能在生圖時要求均亮到邊。驗法：量邊條「不透明像素」平均亮度
+  與中央差 ≤10%。
 
 ### 地形 tile 的驗收（2026-08-24 訂，數值已由第一批 10 張實測校準）
 

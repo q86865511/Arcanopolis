@@ -25,9 +25,13 @@ const tileNames = [
   // （前一代照 DB32 鮮綠生成，中心均色 (109,172,52)；新代約 (90,91,38)）。
   // grass-01/03 走到 v5：v4 的孤立淺卡其亮斑（grass-01）與單一大型深色團塊（grass-03）
   // 鋪排時都成可辨陣列，v5 改要求亮部柔和連續／小型多樣均佈團塊。
-  { raw: 'tile-grass-01-v5.png', out: 'tile-grass-01.png' },
+  // grass-01 下緣、grass-03 上緣有柔性陰影邊（不透明像素亮度比中央低 15%/27%），
+  // 混鋪時菱形界像素交錯歸屬成深色虛線網格；深侵蝕（48）＋加大外擴（116%）清除。
+  { raw: 'tile-grass-01-v5.png', out: 'tile-grass-01.png', erode: 48, stretch: '116%' },
   { raw: 'tile-grass-02-v3.png', out: 'tile-grass-02.png' },
-  { raw: 'tile-grass-03-v5.png', out: 'tile-grass-03.png' },
+  // grass-03 v5 的邊緣陰影深到侵蝕救不動（深侵蝕反把亮內容外擴成亮虛線），v6 重生
+  // 時 prompt 明令均亮到邊。
+  { raw: 'tile-grass-03-v6.png', out: 'tile-grass-03.png' },
   // forest 沿用「連續林冠、樹冠互相咬合」教訓（v2 樹冠成陣列、v3 分離綠球如高爾夫球）。
   { raw: 'tile-forest-01-v6.png', out: 'tile-forest-01.png' },
   { raw: 'tile-forest-02-v5.png', out: 'tile-forest-02.png' },
@@ -37,8 +41,8 @@ const tileNames = [
   { raw: 'tile-rock-02-v3.png', out: 'tile-rock-02.png' },
   { raw: 'tile-dirt-01-v3.png', out: 'tile-dirt-01.png' },
   // 2026-08-25 W1 順手項：water/ore 舊版是純色（標準差 4.6-5.3），依 AoE2 定調重生。
-  { raw: 'tile-water-01-v2.png', out: 'tile-water-01.png' },
-  { raw: 'tile-ore-01-v2.png', out: 'tile-ore-01.png' },
+  { raw: 'tile-water-01-v3.png', out: 'tile-water-01.png' },
+  { raw: 'tile-ore-01-v3.png', out: 'tile-ore-01.png' },
   // 批次 2a 山地重構：舊 mountain 每格畫一座有尖頂的完整小山，鋪排成整齊的山峰陣列，
   // 而且過暗（亮度 55/255）與明亮草地並排時把畫面切成兩塊。
   // 三張改為「無主體的岩石坡面紋理」，供渲染層混用鋪成連續高地。
@@ -119,6 +123,11 @@ try {
   for (const entry of tileNames) {
     const tileName = typeof entry === 'string' ? entry : entry.raw
     const outputName = typeof entry === 'string' ? entry : entry.out
+    // AI 的「柔性陰影邊」比硬黑邊更深（實測可達 raw 上約 40px），預設 12 清不掉時
+    // 以 { erode } 個別加深；侵蝕加深時 { stretch } 也要跟著放大，外擴回填才蓋得住
+    // 被侵蝕的外圈（垂直向半高只有約 384px，112% 只能蓋約 23px 的侵蝕）。
+    const erodeSize = typeof entry === 'string' ? 12 : (entry.erode ?? 12)
+    const stretchPct = typeof entry === 'string' ? '112%' : (entry.stretch ?? '112%')
     const rawPath = path.join(projectRoot, 'assets', 'raw', tileName)
     const outputPath = path.join(projectRoot, 'assets', 'game', outputName)
     const backgroundRemovedPath = path.join(workDir, `${tileName}.background-removed.png`)
@@ -149,7 +158,7 @@ try {
 
     run(magick, [
       backgroundRemovedPath,
-      '(', '+clone', '-alpha', 'extract', '-morphology', 'Erode', 'Diamond:12', ')',
+      '(', '+clone', '-alpha', 'extract', '-morphology', 'Erode', `Diamond:${erodeSize}`, ')',
       '-alpha', 'off', '-compose', 'CopyAlpha', '-composite',
       erodedPath,
     ])
@@ -166,7 +175,7 @@ try {
     // backstop for any corner the stretch still fails to cover.
     run(magick, [
       erodedPath,
-      '(', '+clone', '-resize', '112%', '-gravity', 'center', '-extent', erodedGeometry, ')',
+      '(', '+clone', '-resize', stretchPct, '-gravity', 'center', '-extent', erodedGeometry, ')',
       '+swap', '-compose', 'over', '-composite',
       '-background', surfaceColor, '-alpha', 'remove', '-alpha', 'off',
       '-filter', 'Lanczos', '-resize', '64x32!',

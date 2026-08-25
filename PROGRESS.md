@@ -17,6 +17,16 @@ W4 日夜視覺）→ M6 道路與城市規劃（完整設計已在
 
 ## 已完成
 
+- [2026-08-25] **AoE2 美術 W2 變體混鋪＋裝飾散佈**（typecheck/711 tests/build 全綠，
+  烘焙單塊耗時 +9% < 30% 門檻）。`terrainTextureKeyFor` 簽名加 (seed,gx,gy)，
+  `baseTextureFor` 以 hashNoise 決定論選變體（grass 2:1:1，其餘均分）；新增
+  `src/render/decor.ts` 純函數散佈（grass 0.12/sand 0.06，三 roll 各自 salt），
+  烘進 chunk RT 零每幀成本。測試：terrainTiles 變體決定論改寫＋decor.test.ts 6 案。
+  **新失敗模式入庫**：AI 在菱形邊緣畫「柔性陰影邊」（erode 12 清不掉，混鋪時成深色
+  虛線網格）；深侵蝕＋外擴對邊緣亮暗不均的 raw 會反產亮虛線，唯一可靠解法是生圖時
+  要求均亮到邊——art-bible 前綴新增 UNIFORM BRIGHTNESS 條款（第四條實測缺陷），
+  grass-03/water/ore 依此重生通過，grass-01 以 per-entry erode 48/stretch 116% 收斂。
+  process-terrain-tiles.mjs 支援每項 {erode, stretch} 覆寫。
 - [2026-08-25] **AoE2 美術 W1 定調重生**（typecheck/703 tests/build 全綠）。
   art-bible 新增「AoE2 北極星定調」段（暗橄欖/高雜色/寫實偏暗），地形與建築前綴
   補色調指令（DARK REALISTIC TONE 段）。兩輪生圖共 9 張：grass×3（01 走到 v5、02 v3、
@@ -350,10 +360,8 @@ W4 日夜視覺）→ M6 道路與城市規劃（完整設計已在
   art-bible「地形 tile 的驗收」——禁方向性紋理、禁高對比地標、5×5 目視不可省）。
 
   - ~~W1 定調重生~~ 已完成（2026-08-25，見已完成區；使用者色調確認中）。
-  - **W2 變體混鋪＋裝飾散佈**：`terrainTextureKeyFor` 加決定論變體選擇（同地形依格座標
-    hash 挑 grass-01/02/03，素材已登錄在 assets.ts）；新增 DecorRenderer 把 12 張
-    `decor-*` 裝飾物決定論散佈到草地/沙地（視野裁切；密度可調；車轍太淡可趁機重生）。
-    驗收：截圖無壁紙感、`npm run screenshot` 效能無感退化。
+  - ~~W2 變體混鋪＋裝飾散佈~~ 已完成（2026-08-25，見已完成區；decor 烘進 chunk RT
+    而非獨立 DecorRenderer——靜態決定論隨 chunk 快取零每幀成本）。
   - **W3 斜坡**：階地裙邊從「垂直土壁」改為 AoE2 式斜坡面——生斜坡 tile（四方位，
     比照過渡 tile 的 tl/tr/br/bl 命名與選圖機制）；`ELEVATION_STEP` 視效果調整（8→10px?）。
     驗收：海岸與丘陵交界截圖、`verify-terrain-seams` 通過。
