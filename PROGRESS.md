@@ -2,13 +2,11 @@
 
 ## 目前狀態
 
-**美術方向已定案（2026-08-25）：以世紀帝國 II／Stronghold 為北極星，留在 2D tile 架構**。
-經過一整輪評估（2D 階梯 tile → 山體 sprite → 純 3D → 3D 像素風 → 向量多邊形地形 →
-中世紀城鄉版，六個方向各有 spike 與截圖，全部 commit 在 repo），使用者最終對齊到
-AoE2 式的 2D 預算圖感。**關鍵結論：現有 tile 架構就是 AoE2 的技術構成，差距不在架構
-在素材定調與密度**——待辦區有完整的「AoE2 五波計畫」，交由下一個 session 執行。
-703 tests 綠、tsc 零錯誤。`spike-3d/` 與 `spike-terrain2d/` 保留為評估記錄（路線不採用，
-但 3D spike 校準出的山地拉抬係數與 2.5D 手法日後可參考）。
+**AoE2 美術五波全數完成（2026-08-25），待使用者實玩總驗收**。地形定調（暗橄欖）、
+變體混鋪＋裝飾散佈、斜坡裙邊、2×2 tavern＋麥酒＋12 張建築重生、全畫面色調統一
+全部落地；724 tests 綠、tsc 零錯誤。剩餘素材債見 W4 已完成條目。
+（美術方向定案脈絡：六方向 spike 評估後以世紀帝國 II 為北極星留在 2D tile 架構，
+`spike-3d/` 與 `spike-terrain2d/` 保留為評估記錄。）
 
 **原玩法路線（美術五波完成後接續）**：M5 看得見的城市（W2 資源列診斷／W3 建築選單／
 W4 日夜視覺）→ M6 道路與城市規劃（完整設計已在
@@ -17,6 +15,12 @@ W4 日夜視覺）→ M6 道路與城市規劃（完整設計已在
 
 ## 已完成
 
+- [2026-08-25] **AoE2 美術 W5 色調統一收尾——五波全數完成**（typecheck/724 tests/build 全綠）。
+  新增 `src/render/colorGrade.ts`（COLOR_GRADE 參數集中：saturationDelta −0.15、
+  vignette 0.35；`applyColorGrade` 用 Phaser 內建 postFX，非 WebGL 安全 no-op），
+  CityScene 只套 `cameras.main`。實作 Codex exec，主對話像素驗收：邊緣亮度 −14%、
+  中央不變、飽和 −18%；UI 相機（palette/minimap）AE≈0 確認 HUD 不受影響。
+  此接入點即日後日夜濾鏡（M5-W4）的落點。全套前後對比圖已交使用者總驗收。
 - [2026-08-25] **AoE2 美術 W4 大建築與 tavern**（typecheck/720 tests/build 全綠，
   `npm run balance` 目標帶斷言通過）。render 端 `buildingAnchor` 加 w/h（footprint 水平
   中心＋前緣格底頂點，1×1 逐字回歸；進度條/高度取格同步；新增 placement.test.ts 8 案）。
@@ -385,8 +389,7 @@ W4 日夜視覺）→ M6 道路與城市規劃（完整設計已在
     而非獨立 DecorRenderer——靜態決定論隨 chunk 快取零每幀成本）。
   - ~~W3 斜坡~~ 已完成（2026-08-25，見已完成區；單張雙光影坡面取代四方位，STEP 維持 8）。
   - ~~W4 大建築與建築濃度~~ 已完成（2026-08-25，見已完成區；tavern=穀物→麥酒生產型）。
-  - **W5 色調統一收尾**：全畫面色調微調（暗角/飽和度，可與 M5-W4 的日夜濾鏡同一個
-    shader 接入點一起做）；全套「改造前 vs 後」對比圖交使用者驗收。
+  - ~~W5 色調統一收尾~~ 已完成（2026-08-25，見已完成區；colorGrade.ts 即日夜濾鏡接入點）。
   - 註：批次 2b（山體疊加 sprite）視 W3 斜坡完成後的畫面再議；
     `water-01`／`ore-01` 仍是舊版純色，可併入 W1 或 W2 順手重生。
 

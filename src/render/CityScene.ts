@@ -6,6 +6,7 @@ import { buildingTextureKey, villagerTextureKey } from './assets';
 import { BuildController, PREVIEW_DEPTH } from './BuildController';
 import { CameraController } from './CameraController';
 import { computeCameraBounds } from './cameraBounds';
+import { applyColorGrade } from './colorGrade';
 import { BUILDING_DEFS, buildingSize } from './defs';
 import { createDemoWorld, createSimulationFor } from './demoWorld';
 import { changeSpeed, speedMultiplier, togglePause, INITIAL_SPEED, type GameSpeed } from './gameSpeed';
@@ -160,6 +161,7 @@ export class CityScene extends Phaser.Scene {
 
     this.camera = new CameraController(this);
     this.camera.attach();
+    applyColorGrade(this.cameras.main);
 
     // 世界包圍盒＝地圖外加一圈邊距（上方多留建築高度的頭部空間）。
     // 這是「世界有多大」，與視窗無關；攝影機實際 bounds 由 applyCameraBounds 依視窗再算。
