@@ -267,5 +267,31 @@
       ]
     },
     "enablesTrade": true
+  },
+  {
+    "id": "tavern",
+    "name": "酒館",
+    "size": {
+      "w": 2,
+      "h": 2
+    },
+    "cost": {
+      "wood": 60,
+      "stone": 30,
+      "gold": 40
+    },
+    "production": {
+      "ale": 2
+    },
+    "inputs": {
+      "grain": 4
+    },
+    "jobs": 3,
+    "terrain": {
+      "on": [
+        "grass"
+      ]
+    },
+    "workTicks": 60
   }
 ]

@@ -7,11 +7,12 @@ const MAX_DISPLAY_SIZE = 160;
 const EDGE_PADDING = 12;
 const MIN_DISPLAY_SIZE = 32;
 
+// 代表色取自 assets\game 對應 tile 的實際表面均色（W1 AoE2 定調重生後同步，2026-08-25）。
 const TERRAIN_COLOR: Readonly<Record<TerrainType, readonly [number, number, number]>> = {
-  water: [45, 83, 122],
+  water: [43, 74, 78],
   sand: [213, 185, 116],
-  grass: [101, 155, 76],
-  forest: [43, 98, 62],
+  grass: [84, 89, 39],
+  forest: [56, 61, 25],
   rock: [124, 132, 139],
   mountain: [83, 73, 96],
 };

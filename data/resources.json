@@ -44,6 +44,11 @@
     "basePrice": 12
   },
   {
+    "id": "ale",
+    "name": "麥酒",
+    "basePrice": 8
+  },
+  {
     "id": "tools",
     "name": "工具",
     "basePrice": 30

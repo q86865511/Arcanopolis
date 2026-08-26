@@ -37,19 +37,31 @@ function defsById(defs: BuildingDefWithInputs[]): Map<string, BuildingDefWithInp
 // ── R3：資源表擴充 ────────────────────────────────────────────────────────────
 
 describe('data/resources.json 擴充加工鏈資源（R3）', () => {
-  it('經 parseResourceDefs 驗證通過，含既有 4 種＋新增 6 種共 10 種', () => {
+  it('經 parseResourceDefs 驗證通過，含既有 4 種＋加工鏈 6 種＋ale（W4 酒館）共 11 種', () => {
     const resources = parseResourceDefs(resourcesJson);
-    expect(resources).toHaveLength(10);
+    expect(resources).toHaveLength(11);
     const ids = resources.map((r) => r.id);
-    expect(ids).toEqual(expect.arrayContaining(['wood', 'stone', 'food', 'gold', ...NEW_RESOURCE_IDS]));
+    expect(ids).toEqual(
+      expect.arrayContaining(['wood', 'stone', 'food', 'gold', 'ale', ...NEW_RESOURCE_IDS]),
+    );
   });
 });
 
 // ── R4：建築表擴充 ────────────────────────────────────────────────────────────
 
 describe('data/buildings.json 擴充加工鏈建築（R4）', () => {
-  it('經 parseBuildingDefs 驗證通過，共 11 棟（W1 十棟＋W2 市場）', () => {
-    expect(realDefs()).toHaveLength(11);
+  it('經 parseBuildingDefs 驗證通過，共 12 棟（W1 十棟＋W2 市場＋W4 酒館）', () => {
+    expect(realDefs()).toHaveLength(12);
+  });
+
+  it('tavern：2×2、jobs3、production ale2、inputs grain4、cost、terrain on grass（AoE2 美術 W4）', () => {
+    const tavern = defsById(realDefs()).get('tavern')!;
+    expect(tavern.size).toEqual({ w: 2, h: 2 });
+    expect(tavern.jobs).toBe(3);
+    expect(tavern.production).toEqual({ ale: 2 });
+    expect(tavern.inputs).toEqual({ grain: 4 });
+    expect(tavern.cost).toEqual({ wood: 60, stone: 30, gold: 40 });
+    expect(tavern.terrain).toEqual({ on: ['grass'] });
   });
 
   it('farm 改為產出 grain 4（原 food 3），jobs/cost/terrain 不變', () => {

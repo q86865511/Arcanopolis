@@ -28,10 +28,13 @@ const POPULATION_CONFIG = parsePopulationConfig(populationJson);
 const STARTING_BUILDINGS: ReadonlyArray<readonly [string, number, number]> = [
   ['house', 0, 2],
   ['house', 3, 2],
+  ['house', 6, 2],
   // 食物鏈依序放在伐木場之前：既有 jobs system 距離相同時按陣列序指派，六名居民會先填滿三段鏈。
   ['farm', 0, 4],
   ['mill', 2, 4],
   ['bakery', 4, 4],
+  ['farm', 6, 0],
+  ['tavern', 6, 4],
   ['lumber-camp', 2, 0],
 ];
 
@@ -45,20 +48,29 @@ const STARTING_CITIZENS: ReadonlyArray<readonly [string, number]> = [
   ['citizen#0-5', 1],
 ];
 
+function getStartingBuildingDef(type: string) {
+  const def = BUILDING_DEFS.find((candidate) => candidate.id === type);
+  if (def === undefined) throw new Error(`createDemoWorld: 找不到起始建築定義 "${type}"`);
+  return def;
+}
+
 /**
  * 從世界中心以 Chebyshev 環由內向外搜尋；每圈固定採上、右、下、左的順時針順序。
  * 所有候選都交給 core canBuildAt，故真實地形、near 條件、footprint 與邊界使用同一判準。
  */
 function findStartingAnchor(state: GameState): { x: number; y: number } {
-  const layoutWidth = Math.max(...STARTING_BUILDINGS.map(([, dx]) => dx + 1));
-  const layoutHeight = Math.max(...STARTING_BUILDINGS.map(([, , dy]) => dy + 1));
+  const layoutWidth = Math.max(
+    ...STARTING_BUILDINGS.map(([type, dx]) => dx + getStartingBuildingDef(type).size.w),
+  );
+  const layoutHeight = Math.max(
+    ...STARTING_BUILDINGS.map(([type, , dy]) => dy + getStartingBuildingDef(type).size.h),
+  );
   const centerX = Math.floor((state.worldSize - layoutWidth) / 2);
   const centerY = Math.floor((state.worldSize - layoutHeight) / 2);
 
   const fits = (x: number, y: number): boolean =>
     STARTING_BUILDINGS.every(([type, dx, dy]) => {
-      const def = BUILDING_DEFS.find((candidate) => candidate.id === type);
-      if (def === undefined) throw new Error(`createDemoWorld: 找不到起始建築定義 "${type}"`);
+      const def = getStartingBuildingDef(type);
       return canBuildAt(state, def, x + dx, y + dy, BUILDING_DEFS);
     });
 
@@ -134,8 +146,12 @@ export function createDemoWorld(worldSize?: number): DemoWorld {
     state,
     sim,
     startCenter: {
-      x: anchor.x + (Math.max(...STARTING_BUILDINGS.map(([, dx]) => dx)) + 1) / 2,
-      y: anchor.y + (Math.max(...STARTING_BUILDINGS.map(([, , dy]) => dy)) + 1) / 2,
+      x:
+        anchor.x +
+        Math.max(...STARTING_BUILDINGS.map(([type, dx]) => dx + getStartingBuildingDef(type).size.w)) / 2,
+      y:
+        anchor.y +
+        Math.max(...STARTING_BUILDINGS.map(([type, , dy]) => dy + getStartingBuildingDef(type).size.h)) / 2,
     },
   };
 }

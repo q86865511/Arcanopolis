@@ -21,20 +21,28 @@ const tileNames = [
   // v2 那批 10 張只有 grass-02 與 forest-01 通過鋪排目視；其餘 8 張因方向性紋理
   // （岩層帶／浪紋／犁溝）或高對比地標（橘土斑／藍石礫）在鋪排時形成明顯陣列，
   // 已於 v3 重生。判準與失敗模式見 docs\art-bible.md 的「地形 tile 的驗收」。
-  { raw: 'tile-grass-01-v3.png', out: 'tile-grass-01.png' },
-  { raw: 'tile-grass-02-v2.png', out: 'tile-grass-02.png' },
-  { raw: 'tile-grass-03-v3.png', out: 'tile-grass-03.png' },
-  { raw: 'tile-forest-01-v5.png', out: 'tile-forest-01.png' }, // v2 的樹冠在實機大視野下仍成陣列，v5 改為連續林冠層
-  // forest-02 走到 v4：v3 的「4 個大型樹冠」被 AI 畫成等距排列的分離綠球，鋪排像一盤
-  // 高爾夫球；v4 改要求「連續林冠層、樹冠互相咬合、看不出單棵分界」。
-  { raw: 'tile-forest-02-v4.png', out: 'tile-forest-02.png' },
+  // 2026-08-25 W1 定調重生：草地/森林依 art-bible「AoE2 北極星定調」轉暗橄欖低飽和
+  // （前一代照 DB32 鮮綠生成，中心均色 (109,172,52)；新代約 (90,91,38)）。
+  // grass-01/03 走到 v5：v4 的孤立淺卡其亮斑（grass-01）與單一大型深色團塊（grass-03）
+  // 鋪排時都成可辨陣列，v5 改要求亮部柔和連續／小型多樣均佈團塊。
+  // grass-01 下緣、grass-03 上緣有柔性陰影邊（不透明像素亮度比中央低 15%/27%），
+  // 混鋪時菱形界像素交錯歸屬成深色虛線網格；深侵蝕（48）＋加大外擴（116%）清除。
+  { raw: 'tile-grass-01-v5.png', out: 'tile-grass-01.png', erode: 48, stretch: '116%' },
+  { raw: 'tile-grass-02-v3.png', out: 'tile-grass-02.png' },
+  // grass-03 v5 的邊緣陰影深到侵蝕救不動（深侵蝕反把亮內容外擴成亮虛線），v6 重生
+  // 時 prompt 明令均亮到邊。
+  { raw: 'tile-grass-03-v6.png', out: 'tile-grass-03.png' },
+  // forest 沿用「連續林冠、樹冠互相咬合」教訓（v2 樹冠成陣列、v3 分離綠球如高爾夫球）。
+  { raw: 'tile-forest-01-v6.png', out: 'tile-forest-01.png' },
+  { raw: 'tile-forest-02-v5.png', out: 'tile-forest-02.png' },
   { raw: 'tile-sand-01-v3.png', out: 'tile-sand-01.png' },
   { raw: 'tile-sand-02-v3.png', out: 'tile-sand-02.png' },
   { raw: 'tile-rock-01-v3.png', out: 'tile-rock-01.png' },
   { raw: 'tile-rock-02-v3.png', out: 'tile-rock-02.png' },
   { raw: 'tile-dirt-01-v3.png', out: 'tile-dirt-01.png' },
-  'tile-water-01.png',
-  'tile-ore-01.png',
+  // 2026-08-25 W1 順手項：water/ore 舊版是純色（標準差 4.6-5.3），依 AoE2 定調重生。
+  { raw: 'tile-water-01-v3.png', out: 'tile-water-01.png' },
+  { raw: 'tile-ore-01-v3.png', out: 'tile-ore-01.png' },
   // 批次 2a 山地重構：舊 mountain 每格畫一座有尖頂的完整小山，鋪排成整齊的山峰陣列，
   // 而且過暗（亮度 55/255）與明亮草地並排時把畫面切成兩塊。
   // 三張改為「無主體的岩石坡面紋理」，供渲染層混用鋪成連續高地。
@@ -43,14 +51,19 @@ const tileNames = [
   { raw: 'tile-mountain-03-v2.png', out: 'tile-mountain-03.png' },
   // 單邊過渡 tile：檔名後綴是「過渡到另一種地形的那條菱形邊」在螢幕上的方位。
   // tl=左上邊、tr=右上邊、br=右下邊、bl=左下邊，與 TerrainRenderer 的鄰格對應表一致。
-  'tile-water-shore-tl.png',
-  'tile-water-shore-tr.png',
-  'tile-water-shore-br.png',
-  'tile-water-shore-bl.png',
-  'tile-sand-grass-tl.png',
-  'tile-sand-grass-tr.png',
-  'tile-sand-grass-br.png',
-  'tile-sand-grass-bl.png',
+  // 2026-08-25 W1 色調債：v2 依 AoE2 定調重生——水半換深藍綠(43,74,78)、草半換暗橄欖，
+  // 對齊重生後的 water-01/grass-01。
+  { raw: 'tile-water-shore-tl-v2.png', out: 'tile-water-shore-tl.png' },
+  { raw: 'tile-water-shore-tr-v2.png', out: 'tile-water-shore-tr.png' },
+  { raw: 'tile-water-shore-br-v2.png', out: 'tile-water-shore-br.png' },
+  { raw: 'tile-water-shore-bl-v2.png', out: 'tile-water-shore-bl.png' },
+  { raw: 'tile-sand-grass-tl-v2.png', out: 'tile-sand-grass-tl.png' },
+  { raw: 'tile-sand-grass-tr-v2.png', out: 'tile-sand-grass-tr.png' },
+  { raw: 'tile-sand-grass-br-v2.png', out: 'tile-sand-grass-br.png' },
+  { raw: 'tile-sand-grass-bl-v2.png', out: 'tile-sand-grass-bl.png' },
+  // 階地側壁（W3 斜坡）：raw 自帶左亮右暗光影，裙邊疊層時下緣兩條邊帶分別呈現
+  // bl（受光）/br（背光）坡面，取代舊的 dirt+tint 垂直土壁。
+  { raw: 'tile-slope-A.png', out: 'tile-slope-01.png' },
 ]
 
 function findMagick() {
@@ -115,6 +128,11 @@ try {
   for (const entry of tileNames) {
     const tileName = typeof entry === 'string' ? entry : entry.raw
     const outputName = typeof entry === 'string' ? entry : entry.out
+    // AI 的「柔性陰影邊」比硬黑邊更深（實測可達 raw 上約 40px），預設 12 清不掉時
+    // 以 { erode } 個別加深；侵蝕加深時 { stretch } 也要跟著放大，外擴回填才蓋得住
+    // 被侵蝕的外圈（垂直向半高只有約 384px，112% 只能蓋約 23px 的侵蝕）。
+    const erodeSize = typeof entry === 'string' ? 12 : (entry.erode ?? 12)
+    const stretchPct = typeof entry === 'string' ? '112%' : (entry.stretch ?? '112%')
     const rawPath = path.join(projectRoot, 'assets', 'raw', tileName)
     const outputPath = path.join(projectRoot, 'assets', 'game', outputName)
     const backgroundRemovedPath = path.join(workDir, `${tileName}.background-removed.png`)
@@ -145,7 +163,7 @@ try {
 
     run(magick, [
       backgroundRemovedPath,
-      '(', '+clone', '-alpha', 'extract', '-morphology', 'Erode', 'Diamond:12', ')',
+      '(', '+clone', '-alpha', 'extract', '-morphology', 'Erode', `Diamond:${erodeSize}`, ')',
       '-alpha', 'off', '-compose', 'CopyAlpha', '-composite',
       erodedPath,
     ])
@@ -162,7 +180,7 @@ try {
     // backstop for any corner the stretch still fails to cover.
     run(magick, [
       erodedPath,
-      '(', '+clone', '-resize', '112%', '-gravity', 'center', '-extent', erodedGeometry, ')',
+      '(', '+clone', '-resize', stretchPct, '-gravity', 'center', '-extent', erodedGeometry, ')',
       '+swap', '-compose', 'over', '-composite',
       '-background', surfaceColor, '-alpha', 'remove', '-alpha', 'off',
       '-filter', 'Lanczos', '-resize', '64x32!',

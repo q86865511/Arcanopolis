@@ -47,11 +47,26 @@
 - 光源方向：**左上 45°**，全素材一致（等距建築左立面亮、右立面暗）
 - 描邊：建築與單位使用 **1px 深色描邊（#222034）**；地形 tile 不使用描邊
 
+## AoE2 北極星定調（2026-08-25 使用者定案）
+
+視覺北極星＝**世紀帝國 II／Stronghold 的 2D 預算圖感**。現行地形素材照 DB32 鮮綠
+（#99e550／#6abe30）生成，偏亮偏卡通——這是本定調要修正的偏差。自本日起所有
+地形與建築素材依下列定調生成/重生：
+
+- **暗橄欖基調**：草地以暗橄欖綠為主色（方向：#4b692f、#524b24、#8f974a 一帶），
+  高飽和鮮綠（#99e550／#6abe30）降為極少量點綴；整體明度壓在中低段。
+- **高雜色密度**：表面通篇忙碌，草簇/團塊/明暗斑的密度比現行高一級——
+  AoE2 的地面沒有大片平色。
+- **寫實偏暗**：色相貼近實物、飽和度壓低；「卡通感」（高飽和＋大平色塊）是要移除的方向。
+- DB32 仍是風格指引（非硬約束，同上節裁決）；取用時偏向其暗段與土色系。
+
 ## $imagegen 風格前綴（每批生圖 prompt 逐字帶上）
 
 ```
 pixel art, isometric 2:1 projection, medieval fantasy city-builder sprite,
-DawnBringer DB32 32-color palette, top-left 45-degree lighting so the left facade
+DawnBringer DB32 32-color palette weighted toward its dark and earthy tones, muted
+low-saturation colours in the mood of classic Age of Empires II, no candy-bright
+colours, top-left 45-degree lighting so the left facade
 is lit and the right facade is in shadow, 1px dark outline (#222034), flat shading
 with subtle dithering, no anti-aliasing, crisp pixel edges, building only with no
 ground base tile and no terrain under it, footprint aligned to an isometric diamond
@@ -76,6 +91,12 @@ clumps and bare spots at least 60-120 pixels across. Never a flat single colour,
 never fine speckled noise (fine noise averages back into flat colour when downsampled).
 NO CENTRED MOTIF: keep the detail asymmetric and off-centre, with no single recognisable
 object in the middle, so that tiling many copies shows no repeating pattern.
+DARK REALISTIC TONE IS MANDATORY: colour mood of classic Age of Empires II terrain -
+dark olive greens and muted earthy tones, low saturation, overall slightly dark;
+never bright cartoon greens or candy-saturated colours.
+UNIFORM BRIGHTNESS TO EVERY EDGE: absolutely no vignette, no shading, no shadow and no
+highlight concentrated near any edge of the diamond; the average brightness within 100
+pixels of every edge must equal the average brightness of the centre.
 ```
 
 三處要求各自對應一個實測缺陷（2026-08-24 修訂）：
@@ -85,6 +106,11 @@ object in the middle, so that tiling many copies shows no repeating pattern.
   不講清楚這件事，AI 會畫細雜訊，而細雜訊降採樣後平均回純色——舊 grass 成品的中央標準差
   只有 2.9 就是這樣來的。
 - **NO CENTRED MOTIF**：居中主體是鋪排出現壁紙感的唯一來源（舊 mountain 每格一座同樣的山）。
+- **UNIFORM BRIGHTNESS TO EVERY EDGE**（2026-08-25 W2 加入）：AI 常在菱形邊緣畫「柔性陰影邊」
+  （非硬描邊，erode 12 清不掉；實測 grass-03 v5 上緣不透明像素比中央暗 27%）。鋪排時菱形
+  界像素交錯歸屬，暗邊變成深色虛線網格。後處理深侵蝕救不動（外擴回填會把邊緣附近的
+  亮暗不均放大成亮虛線），只能在生圖時要求均亮到邊。驗法：量邊條「不透明像素」平均亮度
+  與中央差 ≤10%。
 
 ### 地形 tile 的驗收（2026-08-24 訂，數值已由第一批 10 張實測校準）
 

@@ -33,6 +33,7 @@ export const GAME_TEXTURES: readonly TextureEntry[] = [
   { key: 'tile-sand-grass-tr', url: new URL('../../assets/game/tile-sand-grass-tr.png', import.meta.url).href },
   { key: 'tile-sand-grass-br', url: new URL('../../assets/game/tile-sand-grass-br.png', import.meta.url).href },
   { key: 'tile-sand-grass-bl', url: new URL('../../assets/game/tile-sand-grass-bl.png', import.meta.url).href },
+  { key: 'tile-slope-01', url: new URL('../../assets/game/tile-slope-01.png', import.meta.url).href },
   { key: 'lumber-camp-01', url: new URL('../../assets/game/lumber-camp-01.png', import.meta.url).href },
   { key: 'quarry-01', url: new URL('../../assets/game/quarry-01.png', import.meta.url).href },
   { key: 'farm-01', url: new URL('../../assets/game/farm-01.png', import.meta.url).href },

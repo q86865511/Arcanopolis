@@ -2,13 +2,11 @@
 
 ## 目前狀態
 
-**美術方向已定案（2026-08-25）：以世紀帝國 II／Stronghold 為北極星，留在 2D tile 架構**。
-經過一整輪評估（2D 階梯 tile → 山體 sprite → 純 3D → 3D 像素風 → 向量多邊形地形 →
-中世紀城鄉版，六個方向各有 spike 與截圖，全部 commit 在 repo），使用者最終對齊到
-AoE2 式的 2D 預算圖感。**關鍵結論：現有 tile 架構就是 AoE2 的技術構成，差距不在架構
-在素材定調與密度**——待辦區有完整的「AoE2 五波計畫」，交由下一個 session 執行。
-703 tests 綠、tsc 零錯誤。`spike-3d/` 與 `spike-terrain2d/` 保留為評估記錄（路線不採用，
-但 3D spike 校準出的山地拉抬係數與 2.5D 手法日後可參考）。
+**AoE2 美術五波全數完成（2026-08-25），待使用者實玩總驗收**。地形定調（暗橄欖）、
+變體混鋪＋裝飾散佈、斜坡裙邊、2×2 tavern＋麥酒＋12 張建築重生、全畫面色調統一
+全部落地；724 tests 綠、tsc 零錯誤。剩餘素材債見 W4 已完成條目。
+（美術方向定案脈絡：六方向 spike 評估後以世紀帝國 II 為北極星留在 2D tile 架構，
+`spike-3d/` 與 `spike-terrain2d/` 保留為評估記錄。）
 
 **原玩法路線（美術五波完成後接續）**：M5 看得見的城市（W2 資源列診斷／W3 建築選單／
 W4 日夜視覺）→ M6 道路與城市規劃（完整設計已在
@@ -17,6 +15,52 @@ W4 日夜視覺）→ M6 道路與城市規劃（完整設計已在
 
 ## 已完成
 
+- [2026-08-25] **AoE2 美術 W5 色調統一收尾——五波全數完成**（typecheck/724 tests/build 全綠）。
+  新增 `src/render/colorGrade.ts`（COLOR_GRADE 參數集中：saturationDelta −0.15、
+  vignette 0.35；`applyColorGrade` 用 Phaser 內建 postFX，非 WebGL 安全 no-op），
+  CityScene 只套 `cameras.main`。實作 Codex exec，主對話像素驗收：邊緣亮度 −14%、
+  中央不變、飽和 −18%；UI 相機（palette/minimap）AE≈0 確認 HUD 不受影響。
+  此接入點即日後日夜濾鏡（M5-W4）的落點。全套前後對比圖已交使用者總驗收。
+- [2026-08-25] **AoE2 美術 W4 大建築與 tavern**（typecheck/720 tests/build 全綠，
+  `npm run balance` 目標帶斷言通過）。render 端 `buildingAnchor` 加 w/h（footprint 水平
+  中心＋前緣格底頂點，1×1 逐字回歸；進度條/高度取格同步；新增 placement.test.ts 8 案）。
+  新資源 **ale（麥酒，basePrice 8）**＋首個 2×2 建築 **tavern（酒館）**：吃穀物 4 產麥酒 2、
+  jobs 3、cost 木60/石30/金40——給穀物過剩（30 天 8650）一個加工出口；HUD/市場迭代
+  RESOURCE_DEFS 自動顯示，零 UI 改動。demo 世界加 tavern＋第三棟 house＋第二座 farm，
+  存活回歸鎖重校全綠。素材：12 張建築 AoE2 濃度重生（10 主要建築＋tavern 128 寬無底座
+  ＋mine），暗陶紅屋頂/舊木灰泥牆，與 W1 地面同調。資料接線由 Codex exec 實作
+  （count 鎖測試更新由主對話補）。**搬運新坑**：$imagegen 批量的生成順序會偏離清單順序
+  （10 張中 6 張錯位），搬運後必須逐張目視對名再落檔。
+  剩餘素材債：house-02/03、farm-02 變體仍是舊亮色調（渲染層未使用，暫不重生）；
+  wall-01/watchtower-01 無對應建築。
+- [2026-08-25] **AoE2 美術 W3 斜坡裙邊＋過渡 tile 色調債清償**（711 tests/typecheck/build/
+  seams=0 全綠）。裙邊由 dirt+tint 垂直土壁換成 `tile-slope-01` 坡面 tile：疊層機制不變，
+  **單張左亮右暗坡面等效雙方位素材**（每層只露下緣兩條邊帶，bl 帶取受光半、br 帶取背光半），
+  省掉拆 tl/tr/br/bl 四張的計畫複雜度。兩候選（土層梯面 vs 巨石面）選土層梯面——巨石排
+  是高對比離散特徵。**ELEVATION_STEP 實測後維持 8**：改 10 會讓高台前方平地格被覆蓋到
+  不可點選（elevation.test.ts:44 鎖的行為回歸），視覺增益僅邊帶厚 2px，不值。
+  順手清償 W1 色調債：8 張過渡 tile（水岸×4、沙草×4）v2 重生——水半換深藍綠、
+  草半換暗橄欖，海岸線不再出現舊亮藍水+白浪對深藍綠水的斷層。
+  verify-terrain-tiles 的均勻地表門檻對 slope 增設豁免（比照過渡 tile）。
+- [2026-08-25] **AoE2 美術 W2 變體混鋪＋裝飾散佈**（typecheck/711 tests/build 全綠，
+  烘焙單塊耗時 +9% < 30% 門檻）。`terrainTextureKeyFor` 簽名加 (seed,gx,gy)，
+  `baseTextureFor` 以 hashNoise 決定論選變體（grass 2:1:1，其餘均分）；新增
+  `src/render/decor.ts` 純函數散佈（grass 0.12/sand 0.06，三 roll 各自 salt），
+  烘進 chunk RT 零每幀成本。測試：terrainTiles 變體決定論改寫＋decor.test.ts 6 案。
+  **新失敗模式入庫**：AI 在菱形邊緣畫「柔性陰影邊」（erode 12 清不掉，混鋪時成深色
+  虛線網格）；深侵蝕＋外擴對邊緣亮暗不均的 raw 會反產亮虛線，唯一可靠解法是生圖時
+  要求均亮到邊——art-bible 前綴新增 UNIFORM BRIGHTNESS 條款（第四條實測缺陷），
+  grass-03/water/ore 依此重生通過，grass-01 以 per-entry erode 48/stretch 116% 收斂。
+  process-terrain-tiles.mjs 支援每項 {erode, stretch} 覆寫。
+- [2026-08-25] **AoE2 美術 W1 定調重生**（typecheck/703 tests/build 全綠）。
+  art-bible 新增「AoE2 北極星定調」段（暗橄欖/高雜色/寫實偏暗），地形與建築前綴
+  補色調指令（DARK REALISTIC TONE 段）。兩輪生圖共 9 張：grass×3（01 走到 v5、02 v3、
+  03 v5）、forest×2（v6/v5）、water/ore 順手重生（舊版純色→柔和色斑）。
+  第一輪 grass-01 的孤立亮斑與 grass-03 的單一大團塊鋪排成陣列，第二輪以
+  「亮部柔和連續／小型多樣均佈」修正通過。中心均色 (109,172,52)→(84,89,39)。
+  Minimap 代表色同步取新素材實際均色（TerrainRenderer 的 TERRAIN_TINT 查為死碼未動）。
+  驗收：verify-terrain-tiles（grass-02/03、forest×2 過標，grass-01 11.6 略低但 5×5
+  目視通過）、verify-terrain-seams holes=0、實機截圖前後對比交使用者確認色調中。
 - [2026-08-25] **美術方向評估與定案：AoE2 北極星**（703 tests 全程綠）。使用者以 Anno 2070
   截圖提出「山要有真坡度、房與船要立體」，一路評估六個方向、每個都有實跑 spike 與截圖：
   (1) 2D 階梯 tile（已實裝，被評「還是平的」）；(2) 2D 大型山體 sprite（合成 mockup，
@@ -340,21 +384,12 @@ W4 日夜視覺）→ M6 道路與城市規劃（完整設計已在
   生圖走 codex-imagegen＋三支後處理腳本，鋪排驗收跑 `verify-terrain-tiles.mjs`（判準見
   art-bible「地形 tile 的驗收」——禁方向性紋理、禁高對比地標、5×5 目視不可省）。
 
-  - **W1 定調重生**：art-bible 新增「AoE2 北極星」定調段（暗橄欖草地、高雜色、寫實偏暗；
-    現行 tile 偏亮偏卡通是照 DB32 鮮綠生的）。重生 grass ×3／forest ×2 到新定調，
-    迭代至鋪排通過＋與 AoE2 截圖並排比對色調。驗收：verify + 5×5 目視 + 實機截圖。
-  - **W2 變體混鋪＋裝飾散佈**：`terrainTextureKeyFor` 加決定論變體選擇（同地形依格座標
-    hash 挑 grass-01/02/03，素材已登錄在 assets.ts）；新增 DecorRenderer 把 12 張
-    `decor-*` 裝飾物決定論散佈到草地/沙地（視野裁切；密度可調；車轍太淡可趁機重生）。
-    驗收：截圖無壁紙感、`npm run screenshot` 效能無感退化。
-  - **W3 斜坡**：階地裙邊從「垂直土壁」改為 AoE2 式斜坡面——生斜坡 tile（四方位，
-    比照過渡 tile 的 tl/tr/br/bl 命名與選圖機制）；`ELEVATION_STEP` 視效果調整（8→10px?）。
-    驗收：海岸與丘陵交界截圖、`verify-terrain-seams` 通過。
-  - **W4 大建築與建築濃度**：render 支援 2×2 建築（`placement.ts` 的 w/h 參數已有雛形、
-    `buildingSize` 已存在）；tavern（128 寬素材已在）接入；主要建築以 AoE2 濃度重生 1-2 輪
-    （更多細節、更深色調），走 `{raw,out}` 映射落到現用 key。驗收：實機截圖對比。
-  - **W5 色調統一收尾**：全畫面色調微調（暗角/飽和度，可與 M5-W4 的日夜濾鏡同一個
-    shader 接入點一起做）；全套「改造前 vs 後」對比圖交使用者驗收。
+  - ~~W1 定調重生~~ 已完成（2026-08-25，見已完成區；使用者色調確認中）。
+  - ~~W2 變體混鋪＋裝飾散佈~~ 已完成（2026-08-25，見已完成區；decor 烘進 chunk RT
+    而非獨立 DecorRenderer——靜態決定論隨 chunk 快取零每幀成本）。
+  - ~~W3 斜坡~~ 已完成（2026-08-25，見已完成區；單張雙光影坡面取代四方位，STEP 維持 8）。
+  - ~~W4 大建築與建築濃度~~ 已完成（2026-08-25，見已完成區；tavern=穀物→麥酒生產型）。
+  - ~~W5 色調統一收尾~~ 已完成（2026-08-25，見已完成區；colorGrade.ts 即日夜濾鏡接入點）。
   - 註：批次 2b（山體疊加 sprite）視 W3 斜坡完成後的畫面再議；
     `water-01`／`ore-01` 仍是舊版純色，可併入 W1 或 W2 順手重生。
 

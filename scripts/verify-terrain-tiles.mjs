@@ -144,7 +144,8 @@ function measure(magick, file) {
  * 它們的量測門檻與均勻地表 tile 完全不同，一律跳過旗標判定。
  */
 function isTransitionTile(name) {
-  return /-(tl|tr|br|bl)$/.test(name)
+  // slope 是階地側壁貼圖：自帶左亮右暗光影與層理，均勻地表門檻同樣不適用。
+  return /-(tl|tr|br|bl)$/.test(name) || /^tile-slope-/.test(name)
 }
 
 /** 5×5 等距鋪排：格 (c,r) 落在 ((c-r)*32, (c+r)*16)。 */
