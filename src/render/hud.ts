@@ -123,7 +123,7 @@ function selectHint(page: number): string {
 export class Hud {
   private readonly objects: Phaser.GameObjects.GameObject[] = [];
   private bars!: Phaser.GameObjects.Graphics;
-  /** 每項資源一個「標籤＋數值」文字與一個趨勢文字，索引對齊 RESOURCE_DEFS。 */
+  /** 每項資源一個數值文字與一個趨勢文字（資源名由圖示表達，不印字），索引對齊 RESOURCE_DEFS。 */
   /** 每項資源的圖示；圖示素材缺漏時該格為 null，改畫空占位框。 */
   private resourceIcons: (Phaser.GameObjects.Image | null)[] = [];
   private resourceValueTexts: Phaser.GameObjects.Text[] = [];
@@ -386,7 +386,7 @@ export class Hud {
     // 在職率（employed/jobs）會讓每 tick 產量非整數（審查 F10）；顯示層取整，state 本身不動。
     for (const [index, def] of RESOURCE_DEFS.entries()) {
       const value = Math.floor(getResource(this.state, def.id));
-      this.resourceValueTexts[index].setText(`${def.name} ${value}`);
+      this.resourceValueTexts[index].setText(String(value));
 
       if (this.resourceRowLayout.showTrend) {
         const delta = dailyDelta(this.resourceHistory, def.id);

@@ -22,10 +22,10 @@ export const RESOURCE_ITEM_GAP = 8;
  *  150px 在人口項自己的 fitFontSize 下仍能維持接近基準字級，不必犧牲資源列的可用寬度）。 */
 export const POPULATION_COLUMN_WIDTH = 150;
 
-/** 「標籤＋數值」與「趨勢」文字的估計字元數（monospace，供 CHAR_WIDTH_RATIO 估寬用）。
- *  例：「木材 123」約 6~7 字元、「▲12」約 3 字元——11 種資源要擠在一列，抓太寬會讓趨勢欄
- *  在一般桌面寬度（1280）就先被降級隱藏，違背「預設看得到趨勢」的設計意圖。 */
-const CHARS_LABEL_VALUE = 7;
+/** 「數值」與「趨勢」文字的估計字元數（monospace，供 CHAR_WIDTH_RATIO 估寬用）。
+ *  例：「12000」5 字元、「▲12」約 3 字元——資源名由圖示表達不再印字（2026-08-31 使用者裁決，
+ *  省下的寬度讓 800px 窄視窗也塞得下 11 項）；11 種資源要擠在一列，抓太寬會讓趨勢欄在 1280 就先被降級隱藏。 */
+const CHARS_LABEL_VALUE = 5;
 const CHARS_TREND = 3;
 
 const BASE_FONT_SIZE = 14;
