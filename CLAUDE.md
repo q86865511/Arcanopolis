@@ -40,9 +40,10 @@
   模式（滿編就業且忽略地形限制）；加 `--full-sim` 才套用完整的人口與地形耗竭規則
   （jobs+production+population+movement，人口從 0 成長，
   可配 `--grid <n>` 地圖邊長與 `--population-config <path>` 覆寫平衡常數，兩者僅 --full-sim 下有效）。
-- 視覺驗證截圖：`npm run screenshot -- [--out path.png] [--wait ms] [--port n] [--center gx,gy]`
+- 視覺驗證截圖：`npm run screenshot -- [--out path.png] [--wait ms] [--port n] [--center gx,gy] [--click x,y] [--hover x,y]`
   ——自起 vite（預設 5199）→ chromium 截圖 → 關閉；頁面無 canvas 或有 pageerror 時 exit 1。
   `--center` 把鏡頭移到指定格（驗證海岸線、礦脈等開局視野外的地方）。
+  `--click`／`--hover` 是畫面像素座標，截圖前先點一下、再移滑鼠過去（驗切頁籤、懸停資訊卡這類互動後才出現的 UI）。
   render 層改動收尾必跑一次產證據圖。
   **內建瀏覽器（Browser pane）不能用來驗證本專案**：canvas 為 0×0，Phaser 場景起不來
   （已登記為環境限制非 bug），視覺驗證一律走本指令的 Playwright 路徑。

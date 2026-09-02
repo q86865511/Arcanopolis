@@ -8,8 +8,8 @@
 import Phaser from 'phaser';
 import { BUILDING_DEFS, POPULATION_CONFIG, RESOURCE_DEFS, resourceName } from './defs';
 import { BuildingPalette } from './BuildingPalette';
+import { BuildingInfoPanel } from './BuildingInfoPanel';
 import { MarketPanel } from './MarketPanel';
-import { buildingsOnPage, pageCount } from './buildingSelection';
 import { computeBarsLayout, fitFontSize } from './hudLayout';
 import {
   ICON_TEXT_GAP,
@@ -28,7 +28,7 @@ import {
   type PopulationDiagnosis,
   type ResourceHistory,
 } from './resourceDiagnostics';
-import { PALETTE_PAD_Y, fitSlotSize, paletteBarHeight } from './paletteLayout';
+import { fitSlotSize, paletteBarHeight, paletteDetailOffsetY, type SlotRect } from './paletteLayout';
 import { INITIAL_SPEED, speedLabel, type GameSpeed } from './gameSpeed';
 import { Minimap, type MinimapTile } from './Minimap';
 import type { Simulation } from '../core/sim/simulation';
@@ -112,17 +112,15 @@ function populationDisplay(
   }
 }
 
-function selectHint(page: number): string {
-  // 格子上已經畫出建築長相與快捷鍵，這行只補格子講不出來的操作方式
-  void page;
-  void buildingsOnPage;
-  void pageCount;
-  return '點格子或按數字鍵選建築　左鍵放置 / 右鍵拆除　空白鍵暫停 / - = 調速';
+function selectHint(): string {
+  // 格子上已經畫出建築長相與快捷鍵、頁籤上寫著階段名，這行只補它們講不出來的操作方式
+  return '點格子或按數字鍵選建築　[ ] 切換階段　左鍵放置 / 右鍵拆除　空白鍵暫停 / - = 調速';
 }
 
 export class Hud {
   private readonly objects: Phaser.GameObjects.GameObject[] = [];
   private bars!: Phaser.GameObjects.Graphics;
+  private bottomBarY = 0;
   /** 每項資源一個數值文字與一個趨勢文字（資源名由圖示表達，不印字），索引對齊 RESOURCE_DEFS。 */
   /** 每項資源的圖示；圖示素材缺漏時該格為 null，改畫空占位框。 */
   private resourceIcons: (Phaser.GameObjects.Image | null)[] = [];
@@ -141,12 +139,12 @@ export class Hud {
   private selectionText!: Phaser.GameObjects.Text;
   private minimap!: Minimap;
   private palette!: BuildingPalette;
+  private infoPanel!: BuildingInfoPanel;
   private market!: MarketPanel;
   private selectedDef: BuildingDef | null = null;
   private speedText!: Phaser.GameObjects.Text;
   private speed: GameSpeed = INITIAL_SPEED;
   private notice: string | null = null;
-  private lastPage = 0;
   /** 最近一次 layout() 的視窗寬度：refresh()/setSelection() 換了文字內容後要用同一個寬度重算字級。 */
   private lastWidth = 0;
 
@@ -154,8 +152,10 @@ export class Hud {
     private readonly scene: Phaser.Scene,
     private readonly state: GameState,
     private readonly sim: Simulation,
-    /** 點擊選單格子時回呼；由 CityScene 接到 BuildController.selectById 上。 */
+    /** 點擊選單格子時回呼；由 CityScene 接到 BuildController.selectDef 上。 */
     private readonly onPickBuilding: (def: BuildingDef) => void = () => {},
+    /** 點擊時代頁籤時回呼；由 CityScene 接到 BuildController.selectTab 上。 */
+    private readonly onPickTab: (tab: number) => void = () => {},
   ) {}
 
   create(): void {
@@ -170,18 +170,28 @@ export class Hud {
     this.populationText = this.makeTopText();
 
     // 置中對齊格子列：說明的是格子，靠左會讓兩者看起來各自為政
-    this.selectionText = this.scene.add.text(0, 0, selectHint(0), uiTextStyle(14, TEXT_COLOR)).setOrigin(0.5, 0);
+    this.selectionText = this.scene.add.text(0, 0, selectHint(), uiTextStyle(14, TEXT_COLOR)).setOrigin(0.5, 0);
     this.register(this.selectionText);
 
     // 靠右對齊：速度是狀態指示而非常按的控制項，放右側不與左側資源數值搶第一眼
     this.speedText = this.scene.add.text(0, TOP_TEXT_PAD_Y, speedLabel(this.speed), uiTextStyle(14, SPEED_COLOR)).setOrigin(1, 0);
     this.register(this.speedText);
 
-    this.palette = new BuildingPalette(this.scene, this.state, HUD_DEPTH + 1, (def) =>
-      this.onPickBuilding(def),
+    this.palette = new BuildingPalette(
+      this.scene,
+      this.state,
+      HUD_DEPTH + 1,
+      (def) => this.onPickBuilding(def),
+      (tab) => this.onPickTab(tab),
+      (def, rect) => this.handlePaletteHover(def, rect),
     );
     this.palette.create();
     this.objects.push(...this.palette.displayObjects);
+
+    // 資訊卡浮在整條下列之上（含市場面板的 depth+20），懸停時才顯示，不與其他 HUD 爭空間
+    this.infoPanel = new BuildingInfoPanel(this.scene, this.state, HUD_DEPTH + 30);
+    this.infoPanel.create();
+    this.objects.push(...this.infoPanel.displayObjects);
 
     this.market = new MarketPanel(this.scene, this.state, this.sim, HUD_DEPTH + 20);
     this.market.create();
@@ -213,7 +223,7 @@ export class Hud {
     const slotSize = fitSlotSize(width, PALETTE_SLOT_COUNT);
     // 說明列坐在格子列底下：文字 y 由格子實際高度推得，格子縮小時說明列跟著上移，
     // 不會在窄視窗留一條空隙或壓到格子。
-    const detailPadY = PALETTE_PAD_Y * 2 + slotSize;
+    const detailPadY = paletteDetailOffsetY(slotSize);
     const barsLayout = computeBarsLayout(height, TOP_BAR_H, bottomH, detailPadY);
 
     this.bars.clear();
@@ -227,9 +237,11 @@ export class Hud {
     this.layoutResourceRow(width);
     this.speedText.setPosition(width - TEXT_PAD_X, TOP_TEXT_PAD_Y);
     this.selectionText.setPosition(Math.round(width / 2), barsLayout.bottomTextY);
+    this.bottomBarY = barsLayout.bottomBar.y;
     this.palette.layout(width, barsLayout.bottomBar.y);
     this.minimap.layout(width, height, TOP_BAR_H, bottomH);
     this.market.layout(width, height);
+    this.infoPanel.layout(width, height);
 
     this.fitSelectionTextToWidth();
   }
@@ -300,7 +312,24 @@ export class Hud {
     this.updateResourceRow();
     this.palette.refresh();
     this.market.refresh();
+    // 資訊卡上的成本／原料要跟著資源存量走，但沒顯示時不必白算一次版面
+    if (this.infoPanel.isVisible) this.infoPanel.refresh();
     this.renderDetailLine();
+  }
+
+  /** 場景關閉時解掉 palette 的場景層 POINTER_MOVE 監聽（見 BuildingPalette.destroy）。 */
+  destroy(): void {
+    this.palette.destroy();
+  }
+
+  /** 懸停格子 → 顯示建築資訊卡；離開或市場面板開著就收起（面板會蓋住卡片，兩者不並存）。 */
+  private handlePaletteHover(def: BuildingDef | null, rect: SlotRect | null): void {
+    if (def === null || rect === null || this.market.isOpen) {
+      this.infoPanel.hide();
+      return;
+    }
+    // 錨在底欄頂邊而非格子頂邊：頁籤列夾在格子與世界之間，錨在格子會讓卡片壓住頁籤。
+    this.infoPanel.show(def, rect.x + rect.size / 2, this.bottomBarY);
   }
 
   updateTerrain(tiles: readonly MinimapTile[]): void {
@@ -311,10 +340,9 @@ export class Hud {
     this.minimap.updateViewport(camera);
   }
 
-  setSelection(def: BuildingDef | null, page = 0): void {
+  setSelection(def: BuildingDef | null, tab = 0): void {
     this.selectedDef = def;
-    this.lastPage = page;
-    this.palette.setPage(page);
+    this.palette.setTab(tab);
     this.palette.setSelected(def);
     this.renderDetailLine();
   }
@@ -331,7 +359,7 @@ export class Hud {
       this.selectionText.setColor(NOTICE_COLOR);
     } else {
       this.selectionText.setText(
-        this.selectedDef === null ? selectHint(this.lastPage) : this.formatSelection(this.selectedDef),
+        this.selectedDef === null ? selectHint() : this.formatSelection(this.selectedDef),
       );
       this.selectionText.setColor(TEXT_COLOR);
     }
@@ -352,7 +380,10 @@ export class Hud {
 
   /** 切換市場面板；沒有市場建築時回 false，由呼叫端提示玩家。 */
   toggleMarket(): boolean {
-    return this.market.toggle();
+    const opened = this.market.toggle();
+    // 市場面板會蓋在選單列上方，開著時殘留的資訊卡會浮在它上面
+    if (this.market.isOpen) this.infoPanel.hide();
+    return opened;
   }
 
   get marketOpen(): boolean {

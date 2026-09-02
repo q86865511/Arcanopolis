@@ -191,7 +191,13 @@ export class CityScene extends Phaser.Scene {
 
     // onPick 在點擊當下才解參考 this.build——Hud 先建立（BuildController 的 HUD 死區要問它列高），
     // 但格子被點到必定晚於兩者都建好。
-    this.hud = new Hud(this, this.state, this.sim, (def) => this.build.selectDef(def));
+    this.hud = new Hud(
+      this,
+      this.state,
+      this.sim,
+      (def) => this.build.selectDef(def),
+      (tab) => this.build.selectTab(tab),
+    );
     this.hud.create();
     this.hud.updateViewport(this.cameras.main);
     this.cameras.main.ignore(this.hud.displayObjects);
@@ -204,7 +210,7 @@ export class CityScene extends Phaser.Scene {
       this,
       this.state,
       this.sim,
-      (def, page) => this.hud.setSelection(def, page),
+      (def, tab) => this.hud.setSelection(def, tab),
       (x, y) => this.hud.handlePalettePointer(x, y),
       (message) => this.hud.setNotice(message),
     );
@@ -221,6 +227,7 @@ export class CityScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
       this.terrain.destroy();
+      this.hud.destroy();
     });
   }
 

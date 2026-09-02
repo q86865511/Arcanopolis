@@ -68,6 +68,31 @@ describe('parseResourceDefs（R2）', () => {
   });
 });
 
+describe('parseBuildingDefs unlockAtPopulation', () => {
+  const resourceIds = new Set(['wood', 'stone', 'gold']);
+
+  it('負數、小數與字串皆拒絕，錯誤訊息含欄位名', () => {
+    const base = validBuildings()[0];
+    for (const unlockAtPopulation of [-1, 1.5, '12']) {
+      expect(() => parseBuildingDefs(
+        [{ ...base, unlockAtPopulation }],
+        resourceIds,
+      )).toThrow(/unlockAtPopulation/);
+    }
+  });
+
+  it('省略時回傳 def 不含該鍵', () => {
+    const [def] = parseBuildingDefs(validBuildings(), resourceIds);
+    expect(Object.prototype.hasOwnProperty.call(def, 'unlockAtPopulation')).toBe(false);
+  });
+
+  it('合法非負整數保留原值', () => {
+    const base = validBuildings()[0];
+    const [def] = parseBuildingDefs([{ ...base, unlockAtPopulation: 12 }], resourceIds);
+    expect(def.unlockAtPopulation).toBe(12);
+  });
+});
+
 describe('parseBuildingDefs（R2）', () => {
   const resourceIds = new Set(['wood', 'stone', 'gold']);
 
