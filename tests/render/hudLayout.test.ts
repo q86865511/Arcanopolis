@@ -1,6 +1,11 @@
 // S4：hudLayout.ts 純算式測試（M3.5 審查建議——F3 的縮字級裁切邏輯即在此驗）
 import { describe, expect, it } from 'vitest';
-import { computeBarsLayout, fitFontSize } from '../../src/render/hudLayout';
+import {
+  TIME_TEXT_RESERVE,
+  computeBarsLayout,
+  fitFontSize,
+  resourceRowAvailableWidth,
+} from '../../src/render/hudLayout';
 
 describe('computeBarsLayout（S4）', () => {
   it('上列貼頂（y=0），下列貼底（y = height - bottomHeight）', () => {
@@ -68,5 +73,16 @@ describe('fitFontSize（S4，F3）', () => {
       expect(fitted).toBeLessThanOrEqual(prev);
       prev = fitted;
     }
+  });
+});
+
+describe('resourceRowAvailableWidth', () => {
+  it('資源列同時預留人口、時間與速度文字寬度', () => {
+    expect(TIME_TEXT_RESERVE).toBe(130);
+    expect(resourceRowAvailableWidth(800, 10, 150, 70)).toBe(800 - 10 * 2 - 150 - 130 - 70);
+  });
+
+  it('視窗過窄時不回傳負寬度', () => {
+    expect(resourceRowAvailableWidth(200, 10, 150, 70)).toBe(0);
   });
 });

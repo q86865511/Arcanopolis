@@ -6,7 +6,8 @@ import { buildingTextureKey, villagerTextureKey } from './assets';
 import { BuildController, PREVIEW_DEPTH } from './BuildController';
 import { CameraController } from './CameraController';
 import { computeCameraBounds } from './cameraBounds';
-import { applyColorGrade } from './colorGrade';
+import { applyColorGrade, type ColorGradeHandle } from './colorGrade';
+import { nightStrength } from './dayNight';
 import { BUILDING_DEFS, buildingSize } from './defs';
 import { createDemoWorld, createSimulationFor } from './demoWorld';
 import { changeSpeed, speedMultiplier, togglePause, INITIAL_SPEED, type GameSpeed } from './gameSpeed';
@@ -112,6 +113,7 @@ export class CityScene extends Phaser.Scene {
   private hud!: Hud;
   private build!: BuildController;
   private terrain!: TerrainRenderer;
+  private colorGrade: ColorGradeHandle | null = null;
   /** 只渲染 HUD 的第二台攝影機（zoom 固定 1），見 hud.ts 開頭說明。 */
   private uiCamera!: Phaser.Cameras.Scene2D.Camera;
   private readonly buildingSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -184,7 +186,8 @@ export class CityScene extends Phaser.Scene {
 
     this.camera = new CameraController(this);
     this.camera.attach();
-    applyColorGrade(this.cameras.main);
+    this.colorGrade = applyColorGrade(this.cameras.main);
+    this.colorGrade?.setNight(nightStrength(timeFromTick(this.state.tick).tickOfDay));
 
     // 世界包圍盒＝地圖外加一圈邊距（上方多留建築高度的頭部空間）。
     // 這是「世界有多大」，與視窗無關；攝影機實際 bounds 由 applyCameraBounds 依視窗再算。
@@ -427,6 +430,7 @@ export class CityScene extends Phaser.Scene {
       this.syncCitizens();
       this.drawProgressBars();
       this.hud.refresh();
+      this.colorGrade?.setNight(nightStrength(timeFromTick(this.state.tick).tickOfDay));
       this.autoSaveOnDayBoundary();
     }
     if (terrainChanges.size > 0) this.hud.updateTerrain([...terrainChanges.values()]);

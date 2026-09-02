@@ -10,7 +10,12 @@ import { BUILDING_DEFS, POPULATION_CONFIG, RESOURCE_DEFS, resourceName } from '.
 import { BuildingPalette } from './BuildingPalette';
 import { BuildingInfoPanel } from './BuildingInfoPanel';
 import { MarketPanel } from './MarketPanel';
-import { computeBarsLayout, fitFontSize } from './hudLayout';
+import {
+  TIME_TEXT_RESERVE,
+  computeBarsLayout,
+  fitFontSize,
+  resourceRowAvailableWidth,
+} from './hudLayout';
 import {
   ICON_TEXT_GAP,
   POPULATION_COLUMN_WIDTH,
@@ -34,6 +39,7 @@ import { Minimap, type MinimapTile } from './Minimap';
 import type { Simulation } from '../core/sim/simulation';
 import { getResource, type GameState } from '../core/world/state';
 import { timeFromTick } from '../core/sim/time';
+import { DAY_PHASE_LABEL, clockLabel, dayPhase } from './dayNight';
 import type { BuildingDef } from '../data/types';
 import { UI_COLOR } from './ui/theme';
 import { drawFramedRect, uiTextStyle } from './ui/draw';
@@ -143,6 +149,7 @@ export class Hud {
   private market!: MarketPanel;
   private selectedDef: BuildingDef | null = null;
   private speedText!: Phaser.GameObjects.Text;
+  private timeText!: Phaser.GameObjects.Text;
   private speed: GameSpeed = INITIAL_SPEED;
   private notice: string | null = null;
   /** 最近一次 layout() 的視窗寬度：refresh()/setSelection() 換了文字內容後要用同一個寬度重算字級。 */
@@ -176,6 +183,8 @@ export class Hud {
     // 靠右對齊：速度是狀態指示而非常按的控制項，放右側不與左側資源數值搶第一眼
     this.speedText = this.scene.add.text(0, TOP_TEXT_PAD_Y, speedLabel(this.speed), uiTextStyle(14, SPEED_COLOR)).setOrigin(1, 0);
     this.register(this.speedText);
+    this.timeText = this.scene.add.text(0, TOP_TEXT_PAD_Y, '', uiTextStyle(14, UI_COLOR.text)).setOrigin(1, 0);
+    this.register(this.timeText);
 
     this.palette = new BuildingPalette(
       this.scene,
@@ -205,6 +214,7 @@ export class Hud {
     // layout() 只排位置／算字級，不填內容；不先跑一次內容更新的話，畫面會空白到第一個 tick 跑完為止。
     this.recordDailySnapshotIfNeeded();
     this.updateResourceRow();
+    this.updateTimeText();
   }
 
   /**
@@ -236,6 +246,7 @@ export class Hud {
 
     this.layoutResourceRow(width);
     this.speedText.setPosition(width - TEXT_PAD_X, TOP_TEXT_PAD_Y);
+    this.timeText.setPosition(width - TEXT_PAD_X - SPEED_TEXT_RESERVE, TOP_TEXT_PAD_Y);
     this.selectionText.setPosition(Math.round(width / 2), barsLayout.bottomTextY);
     this.bottomBarY = barsLayout.bottomBar.y;
     this.palette.layout(width, barsLayout.bottomBar.y);
@@ -252,8 +263,12 @@ export class Hud {
    * 圖示占位框直接畫進 this.bars——素材尚未生成，先用空框標出「這裡以後會放圖示」。
    */
   private layoutResourceRow(width: number): void {
-    const rightReserve = TEXT_PAD_X + SPEED_TEXT_RESERVE;
-    const available = Math.max(0, width - TEXT_PAD_X - rightReserve - POPULATION_COLUMN_WIDTH);
+    const available = resourceRowAvailableWidth(
+      width,
+      TEXT_PAD_X,
+      POPULATION_COLUMN_WIDTH,
+      SPEED_TEXT_RESERVE,
+    );
     this.resourceRowLayout = computeResourceRowLayout(available, RESOURCE_DEFS.length);
 
     const iconY = Math.round((TOP_BAR_H - RESOURCE_ICON_SIZE) / 2);
@@ -310,6 +325,7 @@ export class Hud {
   refresh(): void {
     this.recordDailySnapshotIfNeeded();
     this.updateResourceRow();
+    this.updateTimeText();
     this.palette.refresh();
     this.market.refresh();
     // 資訊卡上的成本／原料要跟著資源存量走，但沒顯示時不必白算一次版面
@@ -440,10 +456,17 @@ export class Hud {
     // 人口文案長度隨診斷結果變動，字級沿用舊有的「依實際字元數縮」模型（見檔頭說明）。
     const availableForPopulation = Math.max(
       0,
-      this.lastWidth - this.populationX - TEXT_PAD_X - SPEED_TEXT_RESERVE,
+      this.lastWidth - this.populationX - TEXT_PAD_X - TIME_TEXT_RESERVE - SPEED_TEXT_RESERVE,
     );
     this.populationText.setFontSize(
       fitFontSize(population.text.length, availableForPopulation, RESOURCE_FONT_SIZE, MIN_FONT_SIZE),
+    );
+  }
+
+  private updateTimeText(): void {
+    const time = timeFromTick(this.state.tick);
+    this.timeText.setText(
+      `第${time.totalDay}天 ${clockLabel(time.tickOfDay)} ${DAY_PHASE_LABEL[dayPhase(time.tickOfDay)]}`,
     );
   }
 
