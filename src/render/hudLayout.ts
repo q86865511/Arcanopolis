@@ -27,8 +27,9 @@ export function computeBarsLayout(
   };
 }
 
-/** monospace 字元寬約為字級的這個比例（實測 Courier 系字型近似值）。 */
-const CHAR_WIDTH_RATIO = 0.62;
+/** monospace 字元寬約為字級的這個比例（實測 Courier 系字型近似值）。
+ *  匯出給 resourceRowLayout.ts 共用同一個估寬模型，避免兩處各自校一次而漂移。 */
+export const CHAR_WIDTH_RATIO = 0.62;
 
 /**
  * 依文字長度與可用寬度算出字級：先用 baseFontSize 估算實際寬度，

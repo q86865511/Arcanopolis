@@ -99,6 +99,26 @@ highlight concentrated near any edge of the diamond; the average brightness with
 pixels of every edge must equal the average brightness of the centre.
 ```
 
+UI 圖示（24×24）改用以下前綴——**正面平視、不是等距**，且降採樣倍率比任何其他素材都高
+（1024 → 24 約 40 倍），極簡是唯一能存活的策略：
+
+```
+pixel art game UI icon, single centred object on a plain solid white background,
+front-facing flat view (NOT isometric), DawnBringer DB32 32-color palette weighted
+toward its dark and earthy tones, muted low-saturation colours in the mood of classic
+Age of Empires II, bold 2px dark outline (#222034), flat shading with at most two
+tones per material, no anti-aliasing, crisp pixel edges, no drop shadow, no text,
+no frame, no border decoration.
+EXTREME SIMPLICITY IS MANDATORY: the icon must read as a single bold silhouette at
+24x24 pixels. Use ONE large object filling most of the canvas, chunky and blocky,
+with a strong distinctive outline shape. NO small details, NO thin lines, NO texture,
+NO multiple small objects, NO gradients. Think of a chunky emoji-like symbol.
+```
+
+（2026-08-25 M5-W2 實證：11 種資源圖示照此前綴一次通過，縮到 24×24 後剪影仍可辨。
+後處理走 `scripts\process-icon-sprites.mjs`——最長邊縮 24 後置中補成正方形，
+讓一列圖示的視覺重心對齊。）
+
 三處要求各自對應一個實測缺陷（2026-08-24 修訂）：
 
 - **NO OUTLINE OF ANY KIND**：舊版只寫 `no outline`，AI 照樣加黑邊，後處理得侵蝕 alpha 補救。

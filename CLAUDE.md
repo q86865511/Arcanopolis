@@ -21,8 +21,9 @@
 - 生圖走 Codex $imagegen（codex-imagegen skill）。**後處理一律用專案的三支腳本，不要手打指令**：
   `scripts\process-terrain-tiles.mjs`（地形 tile：套菱形遮罩、按 64×32 縮）、
   `scripts\process-building-sprites.mjs`（建築：按寬度 N×64 縮）、
-  `scripts\process-decor-sprites.mjs`（裝飾散佈物：按高度縮）。
-  三支的 `tileNames`／`buildingSprites`／`decorSprites` 清單支援 `{raw, out}` 映射——
+  `scripts\process-decor-sprites.mjs`（裝飾散佈物：按高度縮）、
+  `scripts\process-icon-sprites.mjs`（UI 圖示：最長邊縮 24 後置中補成 24×24 方形）。
+  四支的 `tileNames`／`buildingSprites`／`decorSprites`／`iconSprites` 清單支援 `{raw, out}` 映射——
   `assets\raw` 永不覆蓋，重生的素材靠映射落到現用的 texture key 上。
 - **降採樣一律 Lanczos，不得用 `-filter point`**：12 倍以上降採樣時 point 會把風車葉片、
   梯子、旗桿這類 1px 細長結構整條打散。

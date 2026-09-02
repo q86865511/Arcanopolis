@@ -6,7 +6,8 @@ import buildingsJson from '../../data/buildings.json';
 import resourcesJson from '../../data/resources.json';
 import terrainEconomyJson from '../../data/terrain-economy.json';
 import economyJson from '../../data/economy.json';
-import { parseBuildingDefs, parseEconomyConfig, parseResourceDefs, parseTerrainEconomy } from '../data/loader';
+import populationJson from '../../data/population.json';
+import { parseBuildingDefs, parseEconomyConfig, parsePopulationConfig, parseResourceDefs, parseTerrainEconomy } from '../data/loader';
 import type { BuildingDef } from '../data/types';
 
 export const RESOURCE_DEFS = parseResourceDefs(resourcesJson);
@@ -14,6 +15,9 @@ export const RESOURCE_DEFS = parseResourceDefs(resourcesJson);
 export const TERRAIN_ECONOMY = parseTerrainEconomy(terrainEconomyJson);
 
 export const ECONOMY_CONFIG = parseEconomyConfig(economyJson);
+
+/** HUD 的人口診斷（resourceDiagnostics.ts）需要與 population system 同一份門檻常數。 */
+export const POPULATION_CONFIG = parsePopulationConfig(populationJson);
 
 export const BUILDING_DEFS = parseBuildingDefs(
   buildingsJson,
