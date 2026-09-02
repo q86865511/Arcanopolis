@@ -2,7 +2,7 @@
 // 失敗一律 throw（不回傳 null/預設值），讓資料表錯誤在載入當下就曝光，而不是流竄到模擬邏輯裡。
 
 import { TERRAIN_TYPES, type TerrainType } from '../core/world/terrain';
-import type { BuildingDef, EconomyConfig, PopulationConfig, ResourceDef, TerrainDef, TerrainEconomy } from './types';
+import type { BuildingDef, EconomyConfig, EraDef, PopulationConfig, ResourceDef, TerrainDef, TerrainEconomy } from './types';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
@@ -43,7 +43,9 @@ const BUILDING_DEF_KEYS = [
   'terrain',
   'enablesTrade',
   'workTicks',
+  'unlockAtPopulation',
 ] as const;
+const ERA_DEF_KEYS = ['id', 'name', 'minPopulation'] as const;
 const BUILDING_SIZE_KEYS = ['w', 'h'] as const;
 const BUILDING_TERRAIN_KEYS = ['on', 'near', 'consumes'] as const;
 const TERRAIN_ECONOMY_KEYS = ['forestWoodCapacity', 'rockStoneCapacity', 'forestRegrowDays'] as const;
@@ -273,7 +275,7 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素必須是物件，收到 ${JSON.stringify(item)}`);
     }
     rejectUnknownKeys(item, BUILDING_DEF_KEYS, `parseBuildingDefs: 第 ${index} 個元素`);
-    const { id, name, size, cost, production, inputs, housing, jobs, terrain, enablesTrade, workTicks } = item;
+    const { id, name, size, cost, production, inputs, housing, jobs, terrain, enablesTrade, workTicks, unlockAtPopulation } = item;
 
     if (!isNonEmptyString(id)) {
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素的 id 必須是非空字串，收到 ${JSON.stringify(id)}`);
@@ -309,6 +311,15 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       );
     }
 
+    if (
+      unlockAtPopulation !== undefined &&
+      (typeof unlockAtPopulation !== 'number' || !Number.isInteger(unlockAtPopulation) || unlockAtPopulation < 0)
+    ) {
+      throw new Error(
+        `parseBuildingDefs: 建築 "${id}" 的 unlockAtPopulation 必須是非負整數（或省略），收到 ${JSON.stringify(unlockAtPopulation)}`,
+      );
+    }
+
     if (seenIds.has(id)) {
       throw new Error(`parseBuildingDefs: id 重複 "${id}"`);
     }
@@ -326,10 +337,52 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       ...(validTerrain === undefined ? {} : { terrain: validTerrain }),
       ...(enablesTrade === true ? { enablesTrade: true } : {}),
       ...(workTicks === undefined ? {} : { workTicks }),
+      ...(unlockAtPopulation === undefined ? {} : { unlockAtPopulation }),
     });
   }
 
   return defs;
+}
+
+/** 時代階段表：至少一階、第一階 minPopulation 必為 0（否則開局無任何頁籤）、門檻嚴格遞增、id 不重複。 */
+export function parseEraDefs(input: unknown): EraDef[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    throw new Error(`parseEraDefs: 輸入必須是非空陣列，收到 ${JSON.stringify(input)}`);
+  }
+  const seenIds = new Set<string>();
+  const eras: EraDef[] = [];
+  for (const [index, item] of input.entries()) {
+    if (!isPlainObject(item)) {
+      throw new Error(`parseEraDefs: 第 ${index} 個元素必須是物件，收到 ${JSON.stringify(item)}`);
+    }
+    rejectUnknownKeys(item, ERA_DEF_KEYS, `parseEraDefs: 第 ${index} 個元素`);
+    const { id, name, minPopulation } = item;
+    if (!isNonEmptyString(id)) {
+      throw new Error(`parseEraDefs: 第 ${index} 個元素的 id 必須是非空字串，收到 ${JSON.stringify(id)}`);
+    }
+    if (!isNonEmptyString(name)) {
+      throw new Error(`parseEraDefs: 階段 "${id}" 的 name 必須是非空字串，收到 ${JSON.stringify(name)}`);
+    }
+    if (typeof minPopulation !== 'number' || !Number.isInteger(minPopulation) || minPopulation < 0) {
+      throw new Error(
+        `parseEraDefs: 階段 "${id}" 的 minPopulation 必須是非負整數，收到 ${JSON.stringify(minPopulation)}`,
+      );
+    }
+    if (index === 0 && minPopulation !== 0) {
+      throw new Error(`parseEraDefs: 第一階段 "${id}" 的 minPopulation 必須是 0，收到 ${minPopulation}`);
+    }
+    if (index > 0 && minPopulation <= eras[index - 1].minPopulation) {
+      throw new Error(
+        `parseEraDefs: 階段 "${id}" 的 minPopulation（${minPopulation}）必須大於前一階段（${eras[index - 1].minPopulation}）`,
+      );
+    }
+    if (seenIds.has(id)) {
+      throw new Error(`parseEraDefs: id 重複 "${id}"`);
+    }
+    seenIds.add(id);
+    eras.push({ id, name, minPopulation });
+  }
+  return eras;
 }
 
 /** 驗證人口常數表欄位：type 為 'positiveInteger' 時額外要求整數（每日人數不可有小數） */

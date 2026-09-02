@@ -33,6 +33,11 @@ export interface BuildingDef {
   jobs: number;
   /** 為真代表該建築完工後解鎖市場交易（trade 指令）；省略等同 false */
   enablesTrade?: boolean;
+  /**
+   * 解鎖所需人口（citizens.length ≥ 此值才可放置）；省略等同 0（開局可建）。
+   * 同時是建築選單的分組依據：對應 data\eras.json 中 minPopulation ≤ 此值的最高階段。
+   */
+  unlockAtPopulation?: number;
   /** 地形規則：on/near 僅限制擺放；consumes 宣告生產時可消耗的地形資源。 */
   terrain?: {
     on?: TerrainType[];
@@ -79,4 +84,12 @@ export interface TerrainEconomy {
   forestWoodCapacity: number;
   rockStoneCapacity: number;
   forestRegrowDays: number;
+}
+
+/** 時代階段（data\eras.json）：建築選單的分類頁籤，minPopulation 嚴格遞增且第一階為 0。 */
+export interface EraDef {
+  id: string;
+  name: string;
+  /** 進入此階段的人口門檻 */
+  minPopulation: number;
 }

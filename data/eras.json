@@ -1,0 +1,5 @@
+[
+  { "id": "village", "name": "村莊", "minPopulation": 0 },
+  { "id": "town", "name": "小鎮", "minPopulation": 12 },
+  { "id": "city", "name": "城市", "minPopulation": 24 }
+]
