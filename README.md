@@ -64,6 +64,9 @@ npm run simulate -- --seed 1 --ticks 3000 --sample-every 600 --buildings "farm:2
 | 取消選取 | `Esc` |
 | 開新局（覆蓋存檔） | `N`（需按兩次確認） |
 
+測試／驗收用 URL 參數：`http://localhost:5173/?new=1` 開全新地圖不讀自動存檔（舊存檔會在第一次日界自動存檔時被覆蓋）；
+`&tick=N` 開局先快轉 N 個 tick（一天 600 tick，例 `?new=1&tick=375` 直接進入第一夜）。
+
 ## 開發狀態
 
 開發中，**AoE2 美術五波完成，處於 MVP 可實玩狀態**：11 種資源、12 棟建築，
