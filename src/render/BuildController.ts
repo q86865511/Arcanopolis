@@ -10,9 +10,10 @@ import type { Simulation } from '../core/sim/simulation';
 import { getResource, type Building, type GameState } from '../core/world/state';
 import { canBuildAt } from '../core/world/buildable';
 import type { BuildingDef } from '../data/types';
-import { buildingsOnPage, wrapPage } from './buildingSelection';
+import { isBuildingUnlocked } from '../data/eras';
+import { buildingsOnTab, lockedBuildingNotice, wrapTab } from './buildingSelection';
 import { demolitionWarning } from './demolition';
-import { BUILDING_DEFS, buildingSize } from './defs';
+import { BUILDING_DEFS, ERA_DEFS, buildingSize } from './defs';
 import { TOP_BAR_H, bottomBarHeight } from './hud';
 import { TILE_H, TILE_W, tileCenter, type GridPoint } from './iso';
 import { UI_COLOR } from './ui/theme';
@@ -29,7 +30,7 @@ const PREVIEW_BLOCKED_COLOR = UI_COLOR.danger;
 const PREVIEW_FILL_ALPHA = 0.35;
 const PREVIEW_LINE_ALPHA = 0.9;
 
-/** 數字鍵 1..9、0 對應目前分頁上的 10 棟建築；超過 10 棟由 [ ] 換頁（見 buildingSelection.ts）。 */
+/** 數字鍵 1..9、0 對應目前時代頁籤上的建築；切頁籤走 [ ]（見 buildingSelection.ts）。 */
 const SELECT_KEY_NAMES = [
   'ONE',
   'TWO',
@@ -49,7 +50,10 @@ const MOUSE_BUTTON_RIGHT = 2;
 export class BuildController {
   private preview!: Phaser.GameObjects.Graphics;
   private selected: BuildingDef | null = null;
-  private page = 0;
+  /** 目前的時代頁籤索引（ERA_DEFS 的索引）。 */
+  private tab = 0;
+  /** 是否正顯示「需人口 N」的提示：下一次成功選取時要把它收掉，否則會蓋著說明列不走。 */
+  private lockNoticeShown = false;
   /** 已提出警告、等待第二次右鍵確認的建築 id；換選建築或按 Esc 都會清掉。 */
   private pendingRemoveId: string | null = null;
   private downX = 0;
@@ -61,7 +65,7 @@ export class BuildController {
     private readonly scene: Phaser.Scene,
     private readonly state: GameState,
     private readonly sim: Simulation,
-    private readonly onSelectionChange: (def: BuildingDef | null, page: number) => void,
+    private readonly onSelectionChange: (def: BuildingDef | null, tab: number) => void,
     /** HUD 先吃點擊：回 true 代表這一下已被選單格子處理，不再當成世界上的放置/拆除。 */
     private readonly onHudPointer: (x: number, y: number) => boolean = () => false,
     /** 顯示/清除下列的警告訊息；null 代表回到平常的說明文字。 */
@@ -73,6 +77,11 @@ export class BuildController {
     this.select(def);
   }
 
+  /** 供 HUD 的時代頁籤呼叫（點頁籤＝切分類）。 */
+  selectTab(tab: number): void {
+    this.setTab(wrapTab(tab, ERA_DEFS));
+  }
+
   attach(): void {
     this.preview = this.scene.add.graphics().setDepth(PREVIEW_DEPTH);
 
@@ -82,15 +91,15 @@ export class BuildController {
 
     const keyboard = input.keyboard;
     if (keyboard) {
-      // 綁定固定在 index 上、選取當下才查表：換頁不必重綁按鍵，也就不會殘留舊頁的 handler。
+      // 綁定固定在 index 上、選取當下才查表：切頁籤不必重綁按鍵，也就不會殘留舊頁籤的 handler。
       SELECT_KEY_NAMES.forEach((keyName, index) => {
         keyboard.on(`keydown-${keyName}`, () => {
-          const def = buildingsOnPage(BUILDING_DEFS, this.page)[index];
+          const def = buildingsOnTab(BUILDING_DEFS, ERA_DEFS, this.tab)[index];
           if (def !== undefined) this.select(def);
         });
       });
-      keyboard.on('keydown-OPEN_BRACKET', () => this.changePage(-1));
-      keyboard.on('keydown-CLOSED_BRACKET', () => this.changePage(1));
+      keyboard.on('keydown-OPEN_BRACKET', () => this.changeTab(-1));
+      keyboard.on('keydown-CLOSED_BRACKET', () => this.changeTab(1));
       keyboard.on('keydown-ESC', () => this.select(null));
     }
 
@@ -153,25 +162,45 @@ export class BuildController {
     }
   }
 
+  /**
+   * 選取的單一閘門：點格子與按數字鍵都走這裡，未達人口門檻的建築一律擋下並提示。
+   * 擋在這裡而不是各自在選單與鍵盤路徑上判斷，提示文案與清除時機才只有一份。
+   */
   private select(def: BuildingDef | null): void {
+    if (def !== null && !isBuildingUnlocked(def, this.state.citizens.length)) {
+      this.lockNoticeShown = true;
+      this.onNotice(lockedBuildingNotice(def));
+      return;
+    }
     this.clearPendingRemove();
+    this.clearLockNotice();
     if (def === this.selected) {
       return;
     }
     this.selected = def;
     this.previewSignature = '';
-    this.onSelectionChange(def, this.page);
+    this.onSelectionChange(def, this.tab);
   }
 
-  /** 換頁後一律取消選取：舊頁選中的建築留著會與畫面上的按鍵提示對不起來。 */
-  private changePage(delta: number): void {
-    const next = wrapPage(this.page + delta, BUILDING_DEFS.length);
-    if (next === this.page) return;
+  /** 切頁籤後一律取消選取：舊頁籤選中的建築留著會與畫面上的按鍵提示對不起來。 */
+  private changeTab(delta: number): void {
+    this.setTab(wrapTab(this.tab + delta, ERA_DEFS));
+  }
+
+  private setTab(next: number): void {
+    if (next === this.tab) return;
     this.clearPendingRemove();
-    this.page = next;
+    this.clearLockNotice();
+    this.tab = next;
     this.selected = null;
     this.previewSignature = '';
-    this.onSelectionChange(null, this.page);
+    this.onSelectionChange(null, this.tab);
+  }
+
+  private clearLockNotice(): void {
+    if (!this.lockNoticeShown) return;
+    this.lockNoticeShown = false;
+    this.onNotice(null);
   }
 
   private requestPlace(tile: GridPoint): void {
@@ -245,6 +274,11 @@ export class BuildController {
   private canPlace(def: BuildingDef, gx: number, gy: number): boolean {
     // canBuildAt 以 state.worldSize 檢查負座標與完整 footprint 的四側邊界。
     if (!canBuildAt(this.state, def, gx, gy, BUILDING_DEFS)) {
+      return false;
+    }
+    // 人口門檻：core 的 applyCommand 另有一道閘門，這裡是為了讓預覽在人口掉回門檻以下時
+    // 立刻轉紅，而不是等玩家按下去才發現指令被靜默丟棄。
+    if (!isBuildingUnlocked(def, this.state.citizens.length)) {
       return false;
     }
     return Object.entries(def.cost).every(

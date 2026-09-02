@@ -4,6 +4,7 @@ import { addResource, getResource, type GameState } from '../world/state';
 import { footprintTiles, isAreaFree } from '../world/occupancy';
 import { canBuildAt } from '../world/buildable';
 import type { BuildingDef, EconomyConfig, ResourceDef } from '../../data/types';
+import { isBuildingUnlocked } from '../../data/eras';
 
 export interface AddResourceCommand {
   type: 'addResource';
@@ -147,6 +148,8 @@ export function applyCommand(
       const costEntries = Object.entries(def.cost);
       const canAfford = costEntries.every(([resource, amount]) => getResource(state, resource) >= amount);
       if (!canAfford) break; // 資源不足（任一項）→ 整筆跳過，不部分扣款
+
+      if (!isBuildingUnlocked(def, state.citizens.length)) break; // 人口未達解鎖門檻 → 靜默跳過
 
       if (!canBuildAt(state, def, command.x, command.y, defs)) break; // 地形/邊界不符 → 靜默跳過
 

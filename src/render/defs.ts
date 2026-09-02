@@ -7,10 +7,14 @@ import resourcesJson from '../../data/resources.json';
 import terrainEconomyJson from '../../data/terrain-economy.json';
 import economyJson from '../../data/economy.json';
 import populationJson from '../../data/population.json';
-import { parseBuildingDefs, parseEconomyConfig, parsePopulationConfig, parseResourceDefs, parseTerrainEconomy } from '../data/loader';
+import erasJson from '../../data/eras.json';
+import terrainJson from '../../data/terrain.json';
+import { parseBuildingDefs, parseEconomyConfig, parseEraDefs, parsePopulationConfig, parseResourceDefs, parseTerrainDefs, parseTerrainEconomy } from '../data/loader';
 import type { BuildingDef } from '../data/types';
 
 export const RESOURCE_DEFS = parseResourceDefs(resourcesJson);
+
+export const TERRAIN_DEFS = parseTerrainDefs(terrainJson);
 
 export const TERRAIN_ECONOMY = parseTerrainEconomy(terrainEconomyJson);
 
@@ -19,6 +23,9 @@ export const ECONOMY_CONFIG = parseEconomyConfig(economyJson);
 /** HUD 的人口診斷（resourceDiagnostics.ts）需要與 population system 同一份門檻常數。 */
 export const POPULATION_CONFIG = parsePopulationConfig(populationJson);
 
+/** 時代階段：建築選單頁籤的分組與命名來源。 */
+export const ERA_DEFS = parseEraDefs(erasJson);
+
 export const BUILDING_DEFS = parseBuildingDefs(
   buildingsJson,
   new Set(RESOURCE_DEFS.map((r) => r.id)),
@@ -26,6 +33,7 @@ export const BUILDING_DEFS = parseBuildingDefs(
 
 const defsById = new Map(BUILDING_DEFS.map((def) => [def.id, def]));
 const resourceNames = new Map(RESOURCE_DEFS.map((r) => [r.id, r.name]));
+const terrainNames = new Map(TERRAIN_DEFS.map((t) => [t.id, t.name]));
 
 export function buildingDef(type: string): BuildingDef | undefined {
   return defsById.get(type);
@@ -38,4 +46,8 @@ export function buildingSize(type: string): { w: number; h: number } {
 
 export function resourceName(id: string): string {
   return resourceNames.get(id) ?? id;
+}
+
+export function terrainName(id: string): string {
+  return terrainNames.get(id) ?? id;
 }

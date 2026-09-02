@@ -1,9 +1,12 @@
 // scripts/screenshot.mjs
 // 一鍵對遊戲畫面截圖的驗證工具：啟動 vite dev server → chromium headless 截圖 → 關閉 server。
 // 用法：node scripts/screenshot.mjs [--port 5199] [--wait 5000] [--out screenshots/latest.png]
-//                                   [--viewport 1280x720]
+//                                   [--viewport 1280x720] [--center gx,gy] [--hover x,y] [--click x,y]
 // 5173 可能被其他 dev server 佔用，預設一律用 5199。
 // --viewport 用於驗證視窗自適應（Scale.RESIZE）：同一畫面換不同視窗尺寸各截一張比對。
+// --hover 是畫面座標（非格座標），截圖前把滑鼠移過去：用來驗懸停才出現的 UI
+// --click 同為畫面座標，在 --hover 之前先左鍵點一下：用來驗點擊後才改變的 UI（如切換建築選單頁籤）
+// （建築選單的資訊卡）；Phaser 的 POINTER_MOVE 要真的有一次移動事件才會觸發。
 
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
@@ -37,9 +40,19 @@ function parseCenter(text) {
   return { gx: Number(match[1]), gy: Number(match[2]) };
 }
 
+/** --hover 的畫面座標（像素）。用於驗證懸停才出現的 UI，如建築選單的資訊卡。 */
+function parseHover(text) {
+  if (text === undefined) return undefined;
+  const match = /^(\d+),(\d+)$/.exec(text);
+  if (match === null) {
+    throw new Error(`screenshot: --hover 格式須為 <x>,<y>（例 520,668），收到 ${text}`);
+  }
+  return { x: Number(match[1]), y: Number(match[2]) };
+}
+
 function parseArgs(argv) {
   const values = new Map();
-  const supported = new Set(['--port', '--wait', '--out', '--viewport', '--center']);
+  const supported = new Set(['--port', '--wait', '--out', '--viewport', '--center', '--hover', '--click']);
 
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index];
@@ -66,8 +79,10 @@ function parseArgs(argv) {
 
   const viewport = parseViewport(values.get('--viewport') ?? '1280x720');
   const center = parseCenter(values.get('--center'));
+  const hover = parseHover(values.get('--hover'));
+  const click = parseHover(values.get('--click'));
 
-  return { port, wait, out, viewport, center };
+  return { port, wait, out, viewport, center, hover, click };
 }
 
 /** 啟動 vite dev server（子程序），stdout 出現 "Local:"（server ready）才 resolve，逾時或提早結束則 reject */
@@ -145,7 +160,7 @@ function killProcessTree(child) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const { port, wait, out, viewport, center } = parseArgs(argv);
+  const { port, wait, out, viewport, center, hover, click } = parseArgs(argv);
   const outPath = resolve(projectRoot, out);
   mkdirSync(dirname(outPath), { recursive: true });
 
@@ -183,6 +198,19 @@ export async function main(argv = process.argv.slice(2)) {
       // 鏡頭移動後 TerrainRenderer 每幀最多新烘一塊，要留時間把新可視區烘完，
       // 否則截到的是半張地圖加一片空白。
       await page.waitForTimeout(2000);
+    }
+
+    if (click !== undefined) {
+      await page.mouse.click(click.x, click.y);
+      await page.waitForTimeout(200);
+    }
+
+    if (hover !== undefined) {
+      // 先移到別處再移到目標點：Phaser 只在座標真的變動時派發 POINTER_MOVE，
+      // 一次到位有機會與初始位置相同而完全不觸發。
+      await page.mouse.move(0, 0);
+      await page.mouse.move(hover.x, hover.y);
+      await page.waitForTimeout(200);
     }
 
     const hasCanvas = (await page.locator('canvas').count()) > 0;
