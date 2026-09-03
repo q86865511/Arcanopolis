@@ -6,13 +6,14 @@ import { buildingTextureKey, villagerTextureKey } from './assets';
 import { BuildController, PREVIEW_DEPTH } from './BuildController';
 import { CameraController } from './CameraController';
 import { computeCameraBounds } from './cameraBounds';
-import { applyColorGrade } from './colorGrade';
+import { applyColorGrade, type ColorGradeHandle } from './colorGrade';
+import { nightStrength } from './dayNight';
 import { BUILDING_DEFS, buildingSize } from './defs';
 import { createDemoWorld, createSimulationFor } from './demoWorld';
 import { changeSpeed, speedMultiplier, togglePause, INITIAL_SPEED, type GameSpeed } from './gameSpeed';
 import { barRect, filledWidth, progressRatio } from './progressBar';
 import { browserStorage, clearSave, loadGame, saveGame, type SaveStorage } from './persistence';
-import { timeFromTick } from '../core/sim/time';
+import { TICKS_PER_DAY, timeFromTick } from '../core/sim/time';
 import { Hud } from './hud';
 import { TILE_H, TILE_W, gridToScreen, tileCenter } from './iso';
 import { TerrainRenderer, type TerrainRenderMetrics } from './TerrainRenderer';
@@ -85,6 +86,26 @@ function requestedWorldSize(): number | undefined {
   return value;
 }
 
+/** `?new=1`：略過自動讀檔直接開新局（測試/驗收用；舊存檔會在第一次日界自動存檔時被覆蓋）。 */
+function requestedNewGame(): boolean {
+  return new URLSearchParams(window.location.search).get('new') === '1';
+}
+
+/**
+ * `?tick=N`：開局後先 headless 快轉 N tick 再進畫面（驗收日夜、人口門檻這類要等的狀態）。
+ * 上限一年（TICKS_PER_DAY × 120）：快轉在 create 內同步執行，太大會卡住頁面。
+ */
+function requestedFastForwardTicks(): number {
+  const raw = new URLSearchParams(window.location.search).get('tick');
+  if (raw === null) return 0;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0 || value > TICKS_PER_DAY * 120) {
+    console.warn(`[CityScene] 忽略不合法的 tick query：${raw}`);
+    return 0;
+  }
+  return value;
+}
+
 export class CityScene extends Phaser.Scene {
   private state!: GameState;
   private sim!: Simulation;
@@ -92,6 +113,7 @@ export class CityScene extends Phaser.Scene {
   private hud!: Hud;
   private build!: BuildController;
   private terrain!: TerrainRenderer;
+  private colorGrade: ColorGradeHandle | null = null;
   /** 只渲染 HUD 的第二台攝影機（zoom 固定 1），見 hud.ts 開頭說明。 */
   private uiCamera!: Phaser.Cameras.Scene2D.Camera;
   private readonly buildingSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -137,7 +159,7 @@ export class CityScene extends Phaser.Scene {
     // 開機自動續上次進度。做成自動而非「按鍵讀檔」是因為真正的痛點是
     // 重新整理就整座城市歸零——會忘記按鍵的情境正好就是會弄丟進度的情境。
     let loadNotice: string | null = null;
-    if (this.storage !== null) {
+    if (this.storage !== null && !requestedNewGame()) {
       const outcome = loadGame(this.storage);
       if (outcome.status === 'loaded') {
         this.state = outcome.state;
@@ -147,6 +169,9 @@ export class CityScene extends Phaser.Scene {
         // 壞檔不自動刪：玩家可能想手動搶救，靜默清掉會讓「城市不見了」毫無線索。
         loadNotice = `存檔讀不回來，已開新局（原檔仍保留）：${outcome.reason}`;
       }
+    }
+    for (let remaining = requestedFastForwardTicks(); remaining > 0; remaining -= 1) {
+      this.sim.tick();
     }
     this.savedDay = timeFromTick(this.state.tick).totalDay;
     this.buildingSprites.clear();
@@ -161,7 +186,8 @@ export class CityScene extends Phaser.Scene {
 
     this.camera = new CameraController(this);
     this.camera.attach();
-    applyColorGrade(this.cameras.main);
+    this.colorGrade = applyColorGrade(this.cameras.main);
+    this.colorGrade?.setNight(nightStrength(timeFromTick(this.state.tick).tickOfDay));
 
     // 世界包圍盒＝地圖外加一圈邊距（上方多留建築高度的頭部空間）。
     // 這是「世界有多大」，與視窗無關；攝影機實際 bounds 由 applyCameraBounds 依視窗再算。
@@ -404,6 +430,7 @@ export class CityScene extends Phaser.Scene {
       this.syncCitizens();
       this.drawProgressBars();
       this.hud.refresh();
+      this.colorGrade?.setNight(nightStrength(timeFromTick(this.state.tick).tickOfDay));
       this.autoSaveOnDayBoundary();
     }
     if (terrainChanges.size > 0) this.hud.updateTerrain([...terrainChanges.values()]);

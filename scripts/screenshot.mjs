@@ -1,11 +1,12 @@
 // scripts/screenshot.mjs
 // 一鍵對遊戲畫面截圖的驗證工具：啟動 vite dev server → chromium headless 截圖 → 關閉 server。
 // 用法：node scripts/screenshot.mjs [--port 5199] [--wait 5000] [--out screenshots/latest.png]
-//                                   [--viewport 1280x720] [--center gx,gy] [--hover x,y] [--click x,y]
+//                                   [--viewport 1280x720] [--center gx,gy] [--hover x,y] [--click x,y] [--query new=1&tick=480]
 // 5173 可能被其他 dev server 佔用，預設一律用 5199。
 // --viewport 用於驗證視窗自適應（Scale.RESIZE）：同一畫面換不同視窗尺寸各截一張比對。
 // --hover 是畫面座標（非格座標），截圖前把滑鼠移過去：用來驗懸停才出現的 UI
 // --click 同為畫面座標，在 --hover 之前先左鍵點一下：用來驗點擊後才改變的 UI（如切換建築選單頁籤）
+// --query 原樣附在 URL 後（不含問號）：new=1 開新局不讀存檔、tick=N 開局先快轉 N tick（見 CityScene）
 // （建築選單的資訊卡）；Phaser 的 POINTER_MOVE 要真的有一次移動事件才會觸發。
 
 import { spawn } from 'node:child_process';
@@ -52,7 +53,7 @@ function parseHover(text) {
 
 function parseArgs(argv) {
   const values = new Map();
-  const supported = new Set(['--port', '--wait', '--out', '--viewport', '--center', '--hover', '--click']);
+  const supported = new Set(['--port', '--wait', '--out', '--viewport', '--center', '--hover', '--click', '--query']);
 
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index];
@@ -81,8 +82,9 @@ function parseArgs(argv) {
   const center = parseCenter(values.get('--center'));
   const hover = parseHover(values.get('--hover'));
   const click = parseHover(values.get('--click'));
+  const query = values.get('--query') ?? '';
 
-  return { port, wait, out, viewport, center, hover, click };
+  return { port, wait, out, viewport, center, hover, click, query };
 }
 
 /** 啟動 vite dev server（子程序），stdout 出現 "Local:"（server ready）才 resolve，逾時或提早結束則 reject */
@@ -160,7 +162,7 @@ function killProcessTree(child) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const { port, wait, out, viewport, center, hover, click } = parseArgs(argv);
+  const { port, wait, out, viewport, center, hover, click, query } = parseArgs(argv);
   const outPath = resolve(projectRoot, out);
   mkdirSync(dirname(outPath), { recursive: true });
 
@@ -184,7 +186,7 @@ export async function main(argv = process.argv.slice(2)) {
       }
     });
 
-    await page.goto(`http://localhost:${port}`, { waitUntil: 'load' });
+    await page.goto(`http://localhost:${port}${query === '' ? '' : `/?${query}`}`, { waitUntil: 'load' });
     await page.waitForTimeout(wait);
 
     if (center !== undefined) {

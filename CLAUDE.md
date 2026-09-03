@@ -40,10 +40,12 @@
   模式（滿編就業且忽略地形限制）；加 `--full-sim` 才套用完整的人口與地形耗竭規則
   （jobs+production+population+movement，人口從 0 成長，
   可配 `--grid <n>` 地圖邊長與 `--population-config <path>` 覆寫平衡常數，兩者僅 --full-sim 下有效）。
-- 視覺驗證截圖：`npm run screenshot -- [--out path.png] [--wait ms] [--port n] [--center gx,gy] [--click x,y] [--hover x,y]`
+- 視覺驗證截圖：`npm run screenshot -- [--out path.png] [--wait ms] [--port n] [--center gx,gy] [--click x,y] [--hover x,y] [--query new=1&tick=N]`
   ——自起 vite（預設 5199）→ chromium 截圖 → 關閉；頁面無 canvas 或有 pageerror 時 exit 1。
   `--center` 把鏡頭移到指定格（驗證海岸線、礦脈等開局視野外的地方）。
   `--click`／`--hover` 是畫面像素座標，截圖前先點一下、再移滑鼠過去（驗切頁籤、懸停資訊卡這類互動後才出現的 UI）。
+  `--query` 原樣附到 URL：`new=1` 開新局不讀存檔、`tick=N` 開局快轉（驗日夜、人口門檻這類要等的狀態）。
+  **交給使用者實玩驗收一律給全新地圖**（2026-09-03 使用者指定）：回報時附 `?new=1` 的網址，不要讓他續舊存檔。
   render 層改動收尾必跑一次產證據圖。
   **內建瀏覽器（Browser pane）不能用來驗證本專案**：canvas 為 0×0，Phaser 場景起不來
   （已登記為環境限制非 bug），視覺驗證一律走本指令的 Playwright 路徑。
@@ -69,6 +71,9 @@
   ——分塊 RenderTexture 會重烘，選圖不穩定會讓畫面閃爍。多邊臨界時取 `EDGE_OFFSETS` 的固定
   優先序，該陣列順序不可任意調換。
 - 新增依賴鄰格的渲染時，`TerrainRenderer.invalidateTile` 必須連鄰格所屬 chunk 一起標髒。
+- **世界相機的色調只經 `src\render\colorGrade.ts` 的 handle**（`applyColorGrade` 回傳的 `setNight`），日夜曲線與時鐘
+  是 `src\render\dayNight.ts` 的純函數（tick 0 ＝ 07:00）。uiCamera 不套任何 postFX，HUD 永遠不隨時刻變色；
+  日夜只做視覺，玩法系統不得讀取夜色強度（細作息屬 M7）。
 - **階梯高度是純視覺屬性**：core 的 `elevationLevelAt`（seed 純函數、不吃 override）給每格
   0–3 階，render 的 `src\render\elevation.ts` 決定階高（`ELEVATION_STEP`）與所有座標修正。
   玩法系統（movement/buildable/jobs）**不得讀取階層**——高度影響玩法屬未來獨立裁決。
