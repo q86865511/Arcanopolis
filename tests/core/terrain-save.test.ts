@@ -97,6 +97,20 @@ describe('R6：存檔 v6——SAVE_SCHEMA_VERSION 與舊檔作廢', () => {
     expect(restored.worldSeed).toBe(4294967295);
   });
 
+  it('F1b：serializeGameState 對 roads 的鍵格式／座標／值做與 deserialize 對稱的驗證（Codex 第二審 M6-W1）', () => {
+    const outOfWorld = createInitialState(1);
+    outOfWorld.roads = { [`${outOfWorld.worldSize},0`]: 1 };
+    expect(() => serializeGameState(outOfWorld)).toThrow(/roads 鍵座標超出世界範圍/);
+
+    const leadingZero = createInitialState(1);
+    leadingZero.roads = { '01,0': 1 };
+    expect(() => serializeGameState(leadingZero)).toThrow(/roads 鍵格式不合法/);
+
+    const wrongValue = createInitialState(1);
+    (wrongValue as unknown as { roads: Record<string, number> }).roads = { '1,1': 2 };
+    expect(() => serializeGameState(wrongValue)).toThrow(/必須是 1/);
+  });
+
   it('F1：serializeGameState 對 citizens／terrainOverrides／roads 超過上限（100000/200000/200000）→ throw', () => {
     const stateWithTooManyCitizens = createInitialState(1);
     (stateWithTooManyCitizens as GameState).citizens = Array.from({ length: 100001 }, (_, i) => ({

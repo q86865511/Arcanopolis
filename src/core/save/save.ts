@@ -82,11 +82,37 @@ export function serializeGameState(state: GameState): string {
       `serializeGameState: terrainOverrides 鍵數不可超過 ${MAX_TERRAIN_OVERRIDES}，收到 ${overrideCount}`,
     );
   }
-  const roadCount = Object.keys(state.roads).length;
-  if (roadCount > MAX_ROADS) {
-    throw new Error(`serializeGameState: roads 鍵數不可超過 ${MAX_ROADS}，收到 ${roadCount}`);
-  }
+  // roads 走與 deserialize 完全相同的驗證（不只鍵數）：in-memory 若被程式 bug 塞進壞鍵或非 1 的值，
+  // 在這裡擋下比覆寫掉玩家的存檔、下次載入才報 corrupt 好得多。
+  validateRoads(state.roads, state.worldSize, 'serializeGameState');
   return JSON.stringify(state);
+}
+
+/** roads 的完整驗證，serialize 與 deserialize 共用，保證「存得下就讀得回」。
+ *  刻意不驗「這格地形能不能鋪路」：地形由 worldSeed 程序生成，terrainGeneratorVersion
+ *  升版後同一格可能算出水——追溯拒收會讓當初存得合法的檔在改版後變成壞檔。 */
+function validateRoads(roads: unknown, worldSize: number, prefix: string): asserts roads is Record<string, 1> {
+  if (typeof roads !== 'object' || roads === null || Array.isArray(roads)) {
+    throw new Error(`${prefix}: roads 必須是物件，收到 ${typeof roads}`);
+  }
+  const roadKeys = Object.keys(roads as Record<string, unknown>);
+  if (roadKeys.length > MAX_ROADS) {
+    throw new Error(`${prefix}: roads 鍵數不可超過 ${MAX_ROADS}，收到 ${roadKeys.length}`);
+  }
+  for (const key of roadKeys) {
+    const match = TILE_KEY_PATTERN.exec(key);
+    if (!match) {
+      throw new Error(`${prefix}: roads 鍵格式不合法，收到 "${key}"`);
+    }
+    if (Number(match[1]) >= worldSize || Number(match[2]) >= worldSize) {
+      throw new Error(`${prefix}: roads 鍵座標超出世界範圍（worldSize=${worldSize}），收到 "${key}"`);
+    }
+    // 值恆為 1（見 GameState.roads）：true／2／"1" 都是想繞過 schema 版本號的擴充，一律拒收
+    const value = (roads as Record<string, unknown>)[key];
+    if (value !== 1) {
+      throw new Error(`${prefix}: roads["${key}"] 必須是 1，收到 ${JSON.stringify(value)}`);
+    }
+  }
 }
 
 /** 已知遷移的 registry。v6 起清空：v1–v5 的存檔一律作廢（deserializeGameState 丟
@@ -352,31 +378,7 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
   // roads 自 v6 起是必填欄位——缺欄不補空物件，因為 v6 的存檔一定寫得出這個欄位，
   // 缺了就是被改壞或不是 v6，靜默補空會讓玩家的整條路網無聲消失。
   const roads = raw.roads;
-  if (typeof roads !== 'object' || roads === null || Array.isArray(roads)) {
-    throw new Error(`deserializeGameState: roads 必須是物件，收到 ${typeof roads}`);
-  }
-  const roadKeys = Object.keys(roads as Record<string, unknown>);
-  if (roadKeys.length > MAX_ROADS) {
-    throw new Error(`deserializeGameState: roads 鍵數不可超過 ${MAX_ROADS}，收到 ${roadKeys.length}`);
-  }
-  // 刻意不驗「這格地形能不能鋪路」：地形由 worldSeed 程序生成，terrainGeneratorVersion
-  // 升版後同一格可能算出水——追溯拒收會讓當初存得合法的檔在改版後變成壞檔。
-  for (const key of roadKeys) {
-    const match = TILE_KEY_PATTERN.exec(key);
-    if (!match) {
-      throw new Error(`deserializeGameState: roads 鍵格式不合法，收到 "${key}"`);
-    }
-    if (Number(match[1]) >= worldSize || Number(match[2]) >= worldSize) {
-      throw new Error(
-        `deserializeGameState: roads 鍵座標超出世界範圍（worldSize=${worldSize}），收到 "${key}"`,
-      );
-    }
-    // 值恆為 1（見 GameState.roads）：true／2／"1" 都是想繞過 schema 版本號的擴充，一律拒收
-    const value = (roads as Record<string, unknown>)[key];
-    if (value !== 1) {
-      throw new Error(`deserializeGameState: roads["${key}"] 必須是 1，收到 ${JSON.stringify(value)}`);
-    }
-  }
+  validateRoads(roads, worldSize, 'deserializeGameState');
 
   const pendingCommands = raw.pendingCommands;
   if (!Array.isArray(pendingCommands)) {
@@ -399,6 +401,6 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
     worldSize,
     terrainOverrides: terrainOverrides as Record<string, TerrainOverride>,
     terrainGeneratorVersion,
-    roads: roads as Record<string, 1>,
+    roads,
   };
 }

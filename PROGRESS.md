@@ -24,7 +24,7 @@
   `data/roads.json`（nonRoadStepCost 3／speedMultiplierOnRoad 1，loader 擋非整數倍且上限 2，因 movement 的 0.1 網格會靜默吞非整數倍）；
   BuildingDef 加 `requiresRoad`／`isRoadRoot`（省略式布林，12 棟明寫 requiresRoad: true，isRoadRoot 本波無人）；
   `src/core/world/roads.ts` 純函數；三處重複的 system 註冊抽成 `src/core/sim/systemStack.ts` 的 `createDefaultSystems`。
-  截圖腳本加 `--storage file.json`（載入前塞 localStorage）驗舊檔文案。分工：資料層 Codex、存檔層 Claude architect、Codex 第二審存檔。
+  截圖腳本加 `--storage file.json`（載入前塞 localStorage）驗舊檔文案。分工：資料層 Codex、存檔層 Claude architect、Codex 第二審存檔（提出 1 中度：serialize 端未對稱驗 roads 鍵格式／座標／值，已抽 validateRoads 共用並補測試）。
   W1 後遊戲行為零變化（道路純資料）。下一波 W2：placeRoad/removeRoad 指令＋道路疊層渲染＋道路工具（先逐格點擊）。
 - [2026-09-03] **M5-W4 日夜視覺＋頂欄時鐘**（typecheck/805 tests/build 全綠，+10 tests；core 零改動）。
   時鐘定義在 `src/render/dayNight.ts` 純函數：tick 0 ＝ 07:00（新局開在白天），一天 600 tick ＝ 24 小時；
