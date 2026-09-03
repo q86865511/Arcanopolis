@@ -2,7 +2,7 @@
 
 ## 目前狀態
 
-**AoE2 美術五波（2026-08-25）與 M5 看得見的城市三波（W2 資源列診斷／W3 建築選單／W4 日夜視覺，2026-09-03）全部完成，待使用者實玩驗收（一律開新地圖 `?new=1`）**。地形定調（暗橄欖）、
+**M5 看得見的城市全部完成、M6 道路與城市規劃進行中（W1 資料層完成 2026-09-03，存檔 v6、舊檔作廢），待使用者實玩驗收（一律開新地圖 `?new=1`）**。地形定調（暗橄欖）、
 變體混鋪＋裝飾散佈、斜坡裙邊、2×2 tavern＋麥酒＋12 張建築重生、全畫面色調統一
 全部落地；724 tests 綠、tsc 零錯誤。剩餘素材債見 W4 已完成條目。
 （美術方向定案脈絡：六方向 spike 評估後以世紀帝國 II 為北極星留在 2D tile 架構，
@@ -15,6 +15,17 @@
 
 ## 已完成
 
+- [2026-09-03] **M6-W1 道路資料層**（typecheck/828 tests/build 全綠，+23 tests；平衡曲線 31 行 CSV 與改前 diff 為空）。
+  `GameState.roads: Record<string, 1>` 獨立稀疏 map（不塞 terrainOverrides：regrowth 整鍵刪除會把同格道路清掉）；
+  存檔 schema **5→6**，roads 正式驗證（鍵格式同 terrainOverrides、座標 < worldSize、值嚴格 1、MAX_ROADS 200000、serialize 對稱守門），
+  **v5 及更早存檔直接作廢**：`OutdatedSaveError` 在遷移分支之前攔截，v1→v5 遷移碼與三個測試檔的歷史語料整段刪除，
+  persistence 加 `outdated` 分流，畫面文案「舊版存檔（v5）不相容，已開新局」（不刪舊檔）。刻意不驗道路所在地形
+  （terrainGeneratorVersion 升版後同格可能變水，追溯拒收會讓合法存檔變壞檔），已鎖成測試。
+  `data/roads.json`（nonRoadStepCost 3／speedMultiplierOnRoad 1，loader 擋非整數倍且上限 2，因 movement 的 0.1 網格會靜默吞非整數倍）；
+  BuildingDef 加 `requiresRoad`／`isRoadRoot`（省略式布林，12 棟明寫 requiresRoad: true，isRoadRoot 本波無人）；
+  `src/core/world/roads.ts` 純函數；三處重複的 system 註冊抽成 `src/core/sim/systemStack.ts` 的 `createDefaultSystems`。
+  截圖腳本加 `--storage file.json`（載入前塞 localStorage）驗舊檔文案。分工：資料層 Codex、存檔層 Claude architect、Codex 第二審存檔。
+  W1 後遊戲行為零變化（道路純資料）。下一波 W2：placeRoad/removeRoad 指令＋道路疊層渲染＋道路工具（先逐格點擊）。
 - [2026-09-03] **M5-W4 日夜視覺＋頂欄時鐘**（typecheck/805 tests/build 全綠，+10 tests；core 零改動）。
   時鐘定義在 `src/render/dayNight.ts` 純函數：tick 0 ＝ 07:00（新局開在白天），一天 600 tick ＝ 24 小時；
   夜色強度 07–18 為 0、18→20 smoothstep 升到 1、20–05 為 1、05→07 降回 0；時段詞清晨／白天／黃昏／夜晚。
@@ -407,6 +418,10 @@
 - [2026-08-21] 目錄骨架、git init、三文件（README/CLAUDE/PROGRESS）、.gitignore/.gitattributes（全 LF）。
 
 ## 進行中
+
+- **M6 道路與城市規劃**（設計原文：`C:\Users\q86865511\.claude\backups\plans-archive\c-users-q86865511-appdata-local-temp-cl-starry-flute.md` 第 95–219 行）：
+  ~~W1 資料層~~ 完成 → W2 指令＋渲染＋道路工具 → W3 bucketSearch 帶權尋路（硬門檻：400 張地圖等價 mismatch=0）
+  → W4 連通性 system＋主堡（規格斷點，整波完成才 commit）→ W5 道路速度加成＋平衡再校準。
 
 （無——M2 已收尾，待使用者實玩驗收）
 

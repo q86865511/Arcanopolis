@@ -40,11 +40,12 @@
   模式（滿編就業且忽略地形限制）；加 `--full-sim` 才套用完整的人口與地形耗竭規則
   （jobs+production+population+movement，人口從 0 成長，
   可配 `--grid <n>` 地圖邊長與 `--population-config <path>` 覆寫平衡常數，兩者僅 --full-sim 下有效）。
-- 視覺驗證截圖：`npm run screenshot -- [--out path.png] [--wait ms] [--port n] [--center gx,gy] [--click x,y] [--hover x,y] [--query new=1&tick=N]`
+- 視覺驗證截圖：`npm run screenshot -- [--out path.png] [--wait ms] [--port n] [--center gx,gy] [--click x,y] [--hover x,y] [--query new=1&tick=N] [--storage file.json]`
   ——自起 vite（預設 5199）→ chromium 截圖 → 關閉；頁面無 canvas 或有 pageerror 時 exit 1。
   `--center` 把鏡頭移到指定格（驗證海岸線、礦脈等開局視野外的地方）。
   `--click`／`--hover` 是畫面像素座標，截圖前先點一下、再移滑鼠過去（驗切頁籤、懸停資訊卡這類互動後才出現的 UI）。
   `--query` 原樣附到 URL：`new=1` 開新局不讀存檔、`tick=N` 開局快轉（驗日夜、人口門檻這類要等的狀態）。
+  `--storage` 讀 JSON（key→value）在載入前塞進 localStorage（驗「讀到某種存檔」的路徑，如舊版存檔文案）。
   **交給使用者實玩驗收一律給全新地圖**（2026-09-03 使用者指定）：回報時附 `?new=1` 的網址，不要讓他續舊存檔。
   render 層改動收尾必跑一次產證據圖。
   **內建瀏覽器（Browser pane）不能用來驗證本專案**：canvas 為 0×0，Phaser 場景起不來
@@ -58,6 +59,11 @@
   不得直接索引 `state.resources`（資源 id 可能與 Object.prototype 成員同名）。
 - `System.update` 必須同步；ctx 僅在該 tick 內有效，不得留存 ctx.rng 跨 tick 使用。
 - 指令一律經 `Simulation.enqueue`（入口驗證），於下一 tick 開頭 FIFO 套用。
+- **system 註冊順序只有一個來源**：`src\core\sim\systemStack.ts` 的 `createDefaultSystems`（M6-W1 起）；demoWorld／balance／fastforward
+  一律呼叫它，不得各自手排清單。道路讀寫走 `src\core\world\roads.ts`（`hasRoad`/`placeRoad`/`removeRoad`），
+  不得直接索引 `state.roads`；道路獨立於 terrainOverrides（regrowth 整鍵刪除會清掉同格道路）。
+- **存檔 v6 起舊檔一律作廢**（`OutdatedSaveError`，不寫遷移）；之後每次 schema 升版仍依鐵則附遷移＋舊檔測試，
+  作廢是 M6 一次性裁決不是新慣例。
 - **在職＝到崗**（M4.5-W1 起）：production 計算在職人數時必須確認 citizen 站在建築 footprint 上，
   只看 `citizen.job` 不算數。任何新增的「依人力運作」機制都沿用此語義，
   否則通勤距離會再次與經濟脫鉤。座標比較用精確相等——movement 抵達時會貼齊格中心。
