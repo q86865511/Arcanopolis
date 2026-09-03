@@ -165,6 +165,10 @@ export class CityScene extends Phaser.Scene {
         this.state = outcome.state;
         this.sim = createSimulationFor(this.state);
         loadNotice = `已接續上次進度（第 ${timeFromTick(this.state.tick).totalDay} 天）`;
+      } else if (outcome.status === 'outdated') {
+        // 舊版存檔作廢是預期內的結果，不是故障——訊息不帶「讀不回來」那種故障語氣。
+        // 也不主動刪檔：新局的第一次日界自動存檔就會覆蓋掉它。
+        loadNotice = `舊版存檔（v${outcome.savedVersion}）不相容，已開新局`;
       } else if (outcome.status === 'corrupt') {
         // 壞檔不自動刪：玩家可能想手動搶救，靜默清掉會讓「城市不見了」毫無線索。
         loadNotice = `存檔讀不回來，已開新局（原檔仍保留）：${outcome.reason}`;

@@ -1,9 +1,11 @@
 // 存檔序列化與遷移。GameState 為純資料，序列化即 JSON；還原時逐欄驗證，
 // 版本不符時先跑 migrations 補到 SAVE_SCHEMA_VERSION 再驗證欄位內容。
+//
+// v6（M6-W1，roads 進 schema）起 SAVE_MIGRATIONS 清空：v1–v5 的存檔一律作廢，
+// 載入時丟 OutdatedSaveError 讓呼叫端開新局。遷移機制本身保留給未來升版。
 
 import { validateCommand, type Command } from '../sim/commands';
 import {
-  DEFAULT_WORLD_SIZE,
   SAVE_SCHEMA_VERSION,
   type Building,
   type Citizen,
@@ -35,8 +37,13 @@ const MAX_WORLD_SEED = 0xffffffff;
  *  取較嚴者）；低於此值時上述保證會在部分 seed 上失效（審查 F5 實測）。 */
 const MIN_WORLD_SIZE = 10;
 
-/** terrainOverrides 鍵格式：`x,y`，非負整數、無前導零（"01,0" 不合法） */
-const TERRAIN_OVERRIDE_KEY_PATTERN = /^(0|[1-9]\d*),(0|[1-9]\d*)$/;
+/** roads 鍵數上限：理由同 MAX_TERRAIN_OVERRIDES——道路是稀疏集合，
+ *  整張圖等級的鍵數代表存檔損壞或被塞爆，拒收而非讓它撐爆記憶體 */
+const MAX_ROADS = 200000;
+
+/** 格座標鍵格式：`x,y`，非負整數、無前導零（"01,0" 不合法）。
+ *  terrainOverrides 與 roads 共用同一種鍵。 */
+const TILE_KEY_PATTERN = /^(0|[1-9]\d*),(0|[1-9]\d*)$/;
 
 const TERRAIN_TYPE_SET: ReadonlySet<string> = new Set<string>(TERRAIN_TYPES);
 
@@ -44,6 +51,23 @@ export interface Migration {
   /** 此遷移把存檔從版本 from 升到 from+1 */
   from: number;
   migrate: (raw: unknown) => unknown;
+}
+
+/** 存檔版本比程式舊、且沒有對應的遷移可走——玩家該做的是開新局。
+ *  與一般的驗證失敗分成兩類，是因為玩家訊息完全不同：「舊版不相容」是預期內的，
+ *  「讀不回來」則暗示程式或存檔真的壞了。 */
+export class OutdatedSaveError extends Error {
+  readonly savedVersion: number;
+  readonly supportedVersion: number;
+
+  constructor(savedVersion: number, supportedVersion: number) {
+    super(
+      `deserializeGameState: 存檔版本 ${savedVersion} 已不受支援（目前 ${supportedVersion}），沒有對應的遷移`,
+    );
+    this.name = 'OutdatedSaveError';
+    this.savedVersion = savedVersion;
+    this.supportedVersion = supportedVersion;
+  }
 }
 
 /** 序列化端守門：與 deserializeGameState 的上限對稱，避免「存得下、讀不回」——
@@ -58,116 +82,21 @@ export function serializeGameState(state: GameState): string {
       `serializeGameState: terrainOverrides 鍵數不可超過 ${MAX_TERRAIN_OVERRIDES}，收到 ${overrideCount}`,
     );
   }
+  const roadCount = Object.keys(state.roads).length;
+  if (roadCount > MAX_ROADS) {
+    throw new Error(`serializeGameState: roads 鍵數不可超過 ${MAX_ROADS}，收到 ${roadCount}`);
+  }
   return JSON.stringify(state);
 }
 
-/** 已知遷移的 registry：v1→v2 僅是 Command 聯集擴充（新增 placeBuilding/removeBuilding），
- *  v1 形狀本身即合法 v2，遷移函式原樣放行即可；v2→v3 新增 citizens 欄位——缺欄才補空陣列
- *  （v2 以前沒有居民系統，空城即正確語義）；raw 已有 citizens 鍵（無論值是否合法）一律保留原值，
- *  交由後續 deserializeGameState 的欄位驗證逐一把關（避免遷移悄悄清空本該視為資料損毀的內容）。
- *  v3→v4 新增地形欄位 worldSeed/worldSize/terrainOverrides，同樣是「缺欄才補」——
- *  worldSeed 沿用舊檔的 rngState（v3 以前開局時 rngState 即 seed，補這個值最接近原局面），
- *  rngState 也不可用時退回固定值 1（不可用 Date.now/Math.random，決定論要求同一舊檔每次遷移結果相同）。
- *  v4→v5 為建築新增選填的 progress（本批生產累積工時）——舊檔沒有這個欄位，缺欄即等同 0，
- *  故遷移原樣放行；升版本號是為了讓「舊檔載入後進度從 0 開始」這件事有明確的版本界線，
- *  而不是靠欄位存在與否隱性推斷。
+/** 已知遷移的 registry。v6 起清空：v1–v5 的存檔一律作廢（deserializeGameState 丟
+ *  OutdatedSaveError，由呼叫端開新局），不再維護那條「Command 聯集擴充 → 補 citizens →
+ *  補地形欄位 → progress 選填」的遷移鏈。遊戲尚未發行，維護五代遷移的正確性成本
+ *  遠高於它保住的存檔價值。
+ *  機制本身完整保留（Migration 型別、applyMigrations、deserializeGameState 的遷移分支）：
+ *  日後要對某一版做向下相容，在此加回 from=N 的項目即可。
  *  deserializeGameState 預設吃這份清單。 */
-export const SAVE_MIGRATIONS: Migration[] = [
-  { from: 1, migrate: (raw) => raw },
-  {
-    from: 2,
-    migrate: (raw) => {
-      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-        throw new Error(`SAVE_MIGRATIONS(v2→v3): 存檔必須是物件，收到 ${JSON.stringify(raw)}`);
-      }
-      const record = raw as Record<string, unknown>;
-      if ('citizens' in record) {
-        return record;
-      }
-      return { ...record, citizens: [] };
-    },
-  },
-  {
-    from: 3,
-    migrate: (raw) => {
-      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-        throw new Error(`SAVE_MIGRATIONS(v3→v4): 存檔必須是物件，收到 ${JSON.stringify(raw)}`);
-      }
-      const record = raw as Record<string, unknown>;
-      const migrated: Record<string, unknown> = { ...record };
-      if (!('worldSeed' in record)) {
-        const rngState = record.rngState;
-        migrated.worldSeed =
-          typeof rngState === 'number' && Number.isInteger(rngState) && rngState >= 0 ? rngState : 1;
-      }
-      if (!('worldSize' in record)) {
-        migrated.worldSize = DEFAULT_WORLD_SIZE;
-      }
-      if (!('terrainOverrides' in record)) {
-        migrated.terrainOverrides = {};
-      }
-      if (!('terrainGeneratorVersion' in record)) {
-        migrated.terrainGeneratorVersion = TERRAIN_GENERATOR_VERSION;
-      }
-
-      // C2：v3 以前的存檔沒有地形資訊，玩家既有建築/居民的座標可能落在升版後才算出的
-      // 不可通行地形上（典型情境：舊檔建築恰好蓋在世界邊緣，升版後那格算出是海）。
-      // 用 grass override 保底，讓舊檔升版後腳下至少是平地——僅在該座標尚無 override 時才補，
-      // 不覆蓋玩家原本就有的改動。座標非法（非整數座標、越界）的項目略過不建 override、
-      // 也不 throw：欄位驗證是 deserializeGameState 的事，遷移層只管「盡量補救」。
-      // 目前建築全 1×1，故僅用單一格座標；多格建築的完整 footprint 需要 defs 的尺寸資訊，
-      // 遷移層拿不到，真的出現多格建築時需另外處理。
-      const worldSizeForBounds =
-        typeof migrated.worldSize === 'number' ? migrated.worldSize : DEFAULT_WORLD_SIZE;
-      const overrides = {
-        ...(migrated.terrainOverrides as Record<string, unknown>),
-      } as Record<string, TerrainOverride>;
-      const ensureGrass = (x: unknown, y: unknown): void => {
-        if (typeof x !== 'number' || !Number.isInteger(x) || typeof y !== 'number' || !Number.isInteger(y)) {
-          return;
-        }
-        if (x < 0 || y < 0 || x >= worldSizeForBounds || y >= worldSizeForBounds) {
-          return;
-        }
-        const key = `${x},${y}`;
-        if (!Object.prototype.hasOwnProperty.call(overrides, key)) {
-          overrides[key] = { type: 'grass' };
-        }
-      };
-      if (Array.isArray(record.buildings)) {
-        for (const item of record.buildings as unknown[]) {
-          if (typeof item === 'object' && item !== null) {
-            const b = item as Record<string, unknown>;
-            ensureGrass(b.x, b.y);
-          }
-        }
-      }
-      if (Array.isArray(record.citizens)) {
-        for (const item of record.citizens as unknown[]) {
-          if (typeof item === 'object' && item !== null) {
-            const c = item as Record<string, unknown>;
-            const cx = typeof c.x === 'number' && Number.isFinite(c.x) ? Math.round(c.x) : c.x;
-            const cy = typeof c.y === 'number' && Number.isFinite(c.y) ? Math.round(c.y) : c.y;
-            ensureGrass(cx, cy);
-          }
-        }
-      }
-      migrated.terrainOverrides = overrides;
-
-      return migrated;
-    },
-  },
-  {
-    from: 4,
-    migrate: (raw) => {
-      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-        throw new Error(`SAVE_MIGRATIONS(v4→v5): 存檔必須是物件，收到 ${JSON.stringify(raw)}`);
-      }
-      // progress 是選填欄位，缺欄即 0；已有值的一律保留原值，交由 deserializeGameState 驗證。
-      return raw;
-    },
-  }
-];
+export const SAVE_MIGRATIONS: Migration[] = [];
 
 /** 依序套用 from=fromVersion..toVersion-1 的遷移；缺任一步即 throw，不部分套用 */
 export function applyMigrations(
@@ -213,6 +142,11 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
     throw new Error(
       `deserializeGameState: schemaVersion 超過目前支援版本 ${SAVE_SCHEMA_VERSION}，收到 ${schemaVersion}`,
     );
+  }
+  // 只看「起始那一步存不存在」而非整條鏈是否完整：鏈中斷代表 registry 寫壞了（程式 bug），
+  // 該由 applyMigrations 丟明確錯誤，不能混進「舊檔作廢」這個對玩家而言完全正常的結果。
+  if (schemaVersion < SAVE_SCHEMA_VERSION && !migrations.some((m) => m.from === schemaVersion)) {
+    throw new OutdatedSaveError(schemaVersion, SAVE_SCHEMA_VERSION);
   }
   if (schemaVersion < SAVE_SCHEMA_VERSION) {
     const migrated = applyMigrations(raw, schemaVersion, SAVE_SCHEMA_VERSION, migrations);
@@ -377,7 +311,7 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
     );
   }
   for (const key of overrideKeys) {
-    const match = TERRAIN_OVERRIDE_KEY_PATTERN.exec(key);
+    const match = TILE_KEY_PATTERN.exec(key);
     if (!match) {
       throw new Error(`deserializeGameState: terrainOverrides 鍵格式不合法，收到 "${key}"`);
     }
@@ -415,13 +349,34 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
     }
   }
 
-  // M6-W1 過渡：roads 尚未進 schema 版本（v6 由存檔升版一併補上完整驗證與舊檔作廢），
-  // 這裡先讓欄位在 round-trip 中不遺失；缺欄視為無道路。
-  const rawRoads = raw.roads;
-  if (rawRoads !== undefined && (typeof rawRoads !== 'object' || rawRoads === null || Array.isArray(rawRoads))) {
-    throw new Error(`deserializeGameState: roads 必須是物件，收到 ${typeof rawRoads}`);
+  // roads 自 v6 起是必填欄位——缺欄不補空物件，因為 v6 的存檔一定寫得出這個欄位，
+  // 缺了就是被改壞或不是 v6，靜默補空會讓玩家的整條路網無聲消失。
+  const roads = raw.roads;
+  if (typeof roads !== 'object' || roads === null || Array.isArray(roads)) {
+    throw new Error(`deserializeGameState: roads 必須是物件，收到 ${typeof roads}`);
   }
-  const roads = (rawRoads ?? {}) as Record<string, 1>;
+  const roadKeys = Object.keys(roads as Record<string, unknown>);
+  if (roadKeys.length > MAX_ROADS) {
+    throw new Error(`deserializeGameState: roads 鍵數不可超過 ${MAX_ROADS}，收到 ${roadKeys.length}`);
+  }
+  // 刻意不驗「這格地形能不能鋪路」：地形由 worldSeed 程序生成，terrainGeneratorVersion
+  // 升版後同一格可能算出水——追溯拒收會讓當初存得合法的檔在改版後變成壞檔。
+  for (const key of roadKeys) {
+    const match = TILE_KEY_PATTERN.exec(key);
+    if (!match) {
+      throw new Error(`deserializeGameState: roads 鍵格式不合法，收到 "${key}"`);
+    }
+    if (Number(match[1]) >= worldSize || Number(match[2]) >= worldSize) {
+      throw new Error(
+        `deserializeGameState: roads 鍵座標超出世界範圍（worldSize=${worldSize}），收到 "${key}"`,
+      );
+    }
+    // 值恆為 1（見 GameState.roads）：true／2／"1" 都是想繞過 schema 版本號的擴充，一律拒收
+    const value = (roads as Record<string, unknown>)[key];
+    if (value !== 1) {
+      throw new Error(`deserializeGameState: roads["${key}"] 必須是 1，收到 ${JSON.stringify(value)}`);
+    }
+  }
 
   const pendingCommands = raw.pendingCommands;
   if (!Array.isArray(pendingCommands)) {
@@ -444,6 +399,6 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
     worldSize,
     terrainOverrides: terrainOverrides as Record<string, TerrainOverride>,
     terrainGeneratorVersion,
-    roads,
+    roads: roads as Record<string, 1>,
   };
 }

@@ -136,7 +136,7 @@ describe('整批產出', () => {
   });
 });
 
-describe('progress 的存檔往返（v5）', () => {
+describe('progress 的存檔往返', () => {
   it('未完成的進度存得起來也讀得回來，載入後接著做完同一批', () => {
     const state = world('batched', 2);
     run(state, 4);
@@ -150,16 +150,14 @@ describe('progress 的存檔往返（v5）', () => {
     expect(getResource(restored, 'wood')).toBe(3 * WORK_TICKS);
   });
 
-  it('v4 舊檔（建築無 progress 欄）可載入，進度視為 0', () => {
+  it('存檔的建築缺 progress 欄（選填）可載入，進度視為 0', () => {
     const state = world('batched', 2);
     const raw = JSON.parse(serializeGameState(state)) as Record<string, unknown>;
-    raw.schemaVersion = 4;
     for (const building of raw.buildings as Array<Record<string, unknown>>) {
       delete building.progress;
     }
 
     const restored = deserializeGameState(JSON.stringify(raw));
-    expect(restored.schemaVersion).toBe(5);
     expect(restored.buildings[0].progress ?? 0).toBe(0);
     run(restored, WORK_TICKS);
     expect(getResource(restored, 'wood')).toBe(3 * WORK_TICKS);

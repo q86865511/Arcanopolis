@@ -2,7 +2,7 @@
 // 失敗一律 throw（不回傳 null/預設值），讓資料表錯誤在載入當下就曝光，而不是流竄到模擬邏輯裡。
 
 import { TERRAIN_TYPES, type TerrainType } from '../core/world/terrain';
-import type { BuildingDef, EconomyConfig, EraDef, PopulationConfig, ResourceDef, TerrainDef, TerrainEconomy } from './types';
+import type { BuildingDef, EconomyConfig, EraDef, PopulationConfig, ResourceDef, RoadsConfig, TerrainDef, TerrainEconomy } from './types';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
@@ -44,12 +44,15 @@ const BUILDING_DEF_KEYS = [
   'enablesTrade',
   'workTicks',
   'unlockAtPopulation',
+  'requiresRoad',
+  'isRoadRoot',
 ] as const;
 const ERA_DEF_KEYS = ['id', 'name', 'minPopulation'] as const;
 const BUILDING_SIZE_KEYS = ['w', 'h'] as const;
 const BUILDING_TERRAIN_KEYS = ['on', 'near', 'consumes'] as const;
 const TERRAIN_ECONOMY_KEYS = ['forestWoodCapacity', 'rockStoneCapacity', 'forestRegrowDays'] as const;
 const ECONOMY_CONFIG_KEYS = ['taxPerEmployedCitizenPerDay', 'marketBuyMarkup'] as const;
+const ROADS_CONFIG_KEYS = ['nonRoadStepCost', 'speedMultiplierOnRoad'] as const;
 const POPULATION_CONFIG_KEYS = [
   'foodPerCitizenPerDay',
   'growthPerDay',
@@ -275,7 +278,22 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素必須是物件，收到 ${JSON.stringify(item)}`);
     }
     rejectUnknownKeys(item, BUILDING_DEF_KEYS, `parseBuildingDefs: 第 ${index} 個元素`);
-    const { id, name, size, cost, production, inputs, housing, jobs, terrain, enablesTrade, workTicks, unlockAtPopulation } = item;
+    const {
+      id,
+      name,
+      size,
+      cost,
+      production,
+      inputs,
+      housing,
+      jobs,
+      terrain,
+      enablesTrade,
+      workTicks,
+      unlockAtPopulation,
+      requiresRoad,
+      isRoadRoot,
+    } = item;
 
     if (!isNonEmptyString(id)) {
       throw new Error(`parseBuildingDefs: 第 ${index} 個元素的 id 必須是非空字串，收到 ${JSON.stringify(id)}`);
@@ -310,6 +328,16 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
         `parseBuildingDefs: 建築 "${id}" 的 enablesTrade 必須是布林值（或省略），收到 ${JSON.stringify(enablesTrade)}`,
       );
     }
+    if (requiresRoad !== undefined && typeof requiresRoad !== 'boolean') {
+      throw new Error(
+        `parseBuildingDefs: 建築 "${id}" 的 requiresRoad 必須是布林值（或省略），收到 ${JSON.stringify(requiresRoad)}`,
+      );
+    }
+    if (isRoadRoot !== undefined && typeof isRoadRoot !== 'boolean') {
+      throw new Error(
+        `parseBuildingDefs: 建築 "${id}" 的 isRoadRoot 必須是布林值（或省略），收到 ${JSON.stringify(isRoadRoot)}`,
+      );
+    }
 
     if (
       unlockAtPopulation !== undefined &&
@@ -338,6 +366,8 @@ export function parseBuildingDefs(input: unknown, resourceIds: Set<string>): Bui
       ...(enablesTrade === true ? { enablesTrade: true } : {}),
       ...(workTicks === undefined ? {} : { workTicks }),
       ...(unlockAtPopulation === undefined ? {} : { unlockAtPopulation }),
+      ...(requiresRoad === true ? { requiresRoad: true } : {}),
+      ...(isRoadRoot === true ? { isRoadRoot: true } : {}),
     });
   }
 
@@ -454,6 +484,34 @@ export function parseEconomyConfig(input: unknown): EconomyConfig {
   }
 
   return { taxPerEmployedCitizenPerDay, marketBuyMarkup };
+}
+
+export function parseRoadsConfig(input: unknown): RoadsConfig {
+  if (!isPlainObject(input)) {
+    throw new Error(`parseRoadsConfig: 輸入必須是物件，收到 ${JSON.stringify(input)}`);
+  }
+  rejectUnknownKeys(input, ROADS_CONFIG_KEYS, 'parseRoadsConfig');
+
+  const { nonRoadStepCost, speedMultiplierOnRoad } = input;
+  if (typeof nonRoadStepCost !== 'number' || !Number.isInteger(nonRoadStepCost) || nonRoadStepCost < 1) {
+    throw new Error(
+      `parseRoadsConfig: nonRoadStepCost 必須是至少 1 的整數，收到 ${JSON.stringify(nonRoadStepCost)}`,
+    );
+  }
+  // movement 以 Math.round(... * COORD_SCALE) / COORD_SCALE 在 0.1 網格前進；非整數倍
+  // 速度會在無錯誤下被靜默吞成別的值。上限 2 是效能基線：速度 ×2 ＝尋路搜尋頻率 ×2。
+  if (
+    typeof speedMultiplierOnRoad !== 'number' ||
+    !Number.isInteger(speedMultiplierOnRoad) ||
+    speedMultiplierOnRoad < 1 ||
+    speedMultiplierOnRoad > 2
+  ) {
+    throw new Error(
+      `parseRoadsConfig: speedMultiplierOnRoad 必須是 1~2 的整數，收到 ${JSON.stringify(speedMultiplierOnRoad)}`,
+    );
+  }
+
+  return { nonRoadStepCost, speedMultiplierOnRoad };
 }
 
 export function parseTerrainEconomy(input: unknown): TerrainEconomy {

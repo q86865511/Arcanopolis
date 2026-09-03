@@ -6,7 +6,7 @@
 // 儲存介面抽成參數而非直接抓全域 localStorage：headless 測試沒有 localStorage，
 // 且真實環境會因為無痕模式或配額用盡而丟例外，兩者都要能在不碰瀏覽器的情況下測到。
 
-import { deserializeGameState, serializeGameState } from '../core/save/save';
+import { OutdatedSaveError, deserializeGameState, serializeGameState } from '../core/save/save';
 import type { GameState } from '../core/world/state';
 
 export const SAVE_KEY = 'arcanopolis:save';
@@ -27,7 +27,10 @@ export type LoadOutcome =
   | { status: 'loaded'; state: GameState }
   | { status: 'empty' }
   /** 存檔存在但讀不回來：schema 損毀、被手動改壞、或舊版遷移失敗。 */
-  | { status: 'corrupt'; reason: string };
+  | { status: 'corrupt'; reason: string }
+  /** 存檔是已作廢的舊版本（v6 起 v1–v5 一律作廢）。與 corrupt 分開是為了讓 UI
+   *  說「舊版不相容」而不是「讀不回來」——後者會讓玩家以為遊戲有 bug。 */
+  | { status: 'outdated'; savedVersion: number };
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -62,6 +65,9 @@ export function loadGame(storage: SaveStorage): LoadOutcome {
   try {
     return { status: 'loaded', state: deserializeGameState(json) };
   } catch (error) {
+    if (error instanceof OutdatedSaveError) {
+      return { status: 'outdated', savedVersion: error.savedVersion };
+    }
     // 壞掉的存檔不自動刪除：玩家可能想手動搶救，而靜默清掉會讓「我的城市不見了」
     // 完全無跡可循。由呼叫端決定要不要開新局。
     return { status: 'corrupt', reason: describe(error) };

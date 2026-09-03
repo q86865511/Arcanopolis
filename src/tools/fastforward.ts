@@ -8,13 +8,9 @@ import resourcesJson from '../../data/resources.json';
 import terrainEconomyJson from '../../data/terrain-economy.json';
 import { Simulation } from '../core/sim/simulation';
 import type { System } from '../core/sim/system';
+import { createDefaultSystems } from '../core/sim/systemStack';
 import { timeFromTick } from '../core/sim/time';
-import { createJobsSystem } from '../core/systems/jobs';
-import { createMovementSystem } from '../core/systems/movement';
-import { createPopulationSystem } from '../core/systems/population';
 import { createProductionSystem } from '../core/systems/production';
-import { createRegrowthSystem } from '../core/systems/regrowth';
-import { createTaxSystem } from '../core/systems/tax';
 import { canBuildAt } from '../core/world/buildable';
 import { applyStartingResources } from '../core/world/scenario';
 import {
@@ -276,16 +272,13 @@ export function runFastForward(options: FastForwardOptions): FastForwardResult {
       ? placedBuildings
       : prioritizeFullSimEmployment(placedBuildings);
     const populationConfig = options.populationConfig ?? defaultPopulationConfig;
-    systems = [
-      createJobsSystem(buildingDefs, populationConfig.maxCommuteDistance),
-      createProductionSystem(buildingDefs, terrainEconomy),
-      createPopulationSystem(buildingDefs, populationConfig),
-      // 稅收只掛在 fullSim：非 fullSim 是「理想產能」情境，憑空滿編且不模擬人口，
-      // 掛上去只會產出一條與就業無關的固定金幣直線，對平衡調校沒有意義。
-      createTaxSystem(economyConfig),
-      createRegrowthSystem(terrainEconomy),
-      createMovementSystem(buildingDefs, { w: grid, h: grid }),
-    ];
+    systems = createDefaultSystems({
+      buildingDefs,
+      terrainEconomy,
+      populationConfig,
+      economyConfig,
+      bounds: { w: grid, h: grid },
+    });
   } else {
     // 非 fullSim 是「理想產能」情境：既然會憑空滿編且不模擬人口，同一抽象層級也刻意
     // 剝除地形限制，用來回答建築組合的理論最大產出曲線；真實人口與地形耗竭由 --full-sim 模擬。

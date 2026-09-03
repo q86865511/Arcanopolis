@@ -5,13 +5,8 @@ import resourcesJson from '../../data/resources.json';
 import terrainEconomyJson from '../../data/terrain-economy.json';
 import type { Command } from '../core/sim/commands';
 import { Simulation } from '../core/sim/simulation';
+import { createDefaultSystems } from '../core/sim/systemStack';
 import { TICKS_PER_DAY, timeFromTick } from '../core/sim/time';
-import { createJobsSystem } from '../core/systems/jobs';
-import { createMovementSystem } from '../core/systems/movement';
-import { createPopulationSystem } from '../core/systems/population';
-import { createProductionSystem } from '../core/systems/production';
-import { createRegrowthSystem } from '../core/systems/regrowth';
-import { createTaxSystem } from '../core/systems/tax';
 import { canBuildAt } from '../core/world/buildable';
 import { applyStartingResources } from '../core/world/scenario';
 import { createInitialState, getResource, type Building, type Citizen, type GameState } from '../core/world/state';
@@ -344,14 +339,13 @@ export function createBalanceWorld(seed = 1, worldSize?: number): BalanceWorld {
     state.citizens.push(citizen);
   }
 
-  const systems = [
-    createJobsSystem(BUILDING_DEFS, POPULATION_CONFIG.maxCommuteDistance),
-    createProductionSystem(BUILDING_DEFS, TERRAIN_ECONOMY),
-    createPopulationSystem(BUILDING_DEFS, POPULATION_CONFIG),
-    createTaxSystem(ECONOMY_CONFIG),
-    createRegrowthSystem(TERRAIN_ECONOMY),
-    createMovementSystem(BUILDING_DEFS, { w: state.worldSize, h: state.worldSize }),
-  ];
+  const systems = createDefaultSystems({
+    buildingDefs: BUILDING_DEFS,
+    terrainEconomy: TERRAIN_ECONOMY,
+    populationConfig: POPULATION_CONFIG,
+    economyConfig: ECONOMY_CONFIG,
+    bounds: { w: state.worldSize, h: state.worldSize },
+  });
   const simulation = new Simulation(state, systems, BUILDING_DEFS, {
     resourceDefs: RESOURCE_DEFS,
     economy: ECONOMY_CONFIG,

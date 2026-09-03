@@ -12,12 +12,14 @@ import {
   serializeGameState,
   deserializeGameState,
   applyMigrations,
+  OutdatedSaveError,
+  SAVE_MIGRATIONS,
   type Migration,
 } from '../../src/core/save/save';
 
 describe('R1：GameState 擴充 schemaVersion + pendingCommands', () => {
-  it('state.ts 匯出常數 SAVE_SCHEMA_VERSION = 4（M3.9：新增地形欄位升版）', () => {
-    expect(SAVE_SCHEMA_VERSION).toBe(5);
+  it('state.ts 匯出常數 SAVE_SCHEMA_VERSION = 6（M6-W1：roads 進 schema）', () => {
+    expect(SAVE_SCHEMA_VERSION).toBe(6);
   });
 
   it('createInitialState 填入 schemaVersion 與空 pendingCommands', () => {
@@ -246,7 +248,7 @@ describe('R5：遷移 registry（Migration + applyMigrations）', () => {
   });
 });
 
-describe('M3：schema v2 遷移（SAVE_MIGRATIONS，真實舊版 v1 存檔端到端）', () => {
+describe('M6-W1：v5 及更早的存檔一律作廢（OutdatedSaveError）', () => {
   /** 手工構造的合法 v1 存檔（schemaVersion:1，含一筆 pending addResource 指令）。 */
   function v1SaveJson(): string {
     const v1 = {
@@ -260,28 +262,70 @@ describe('M3：schema v2 遷移（SAVE_MIGRATIONS，真實舊版 v1 存檔端到
     return JSON.stringify(v1);
   }
 
-  it('(a) 預設參數 deserialize v1 存檔成功：schemaVersion 升為目前版本、資料完整保留', () => {
-    const restored = deserializeGameState(v1SaveJson());
+  /** 由目前的 state 反推出的 v5 存檔：欄位齊全，只差版本號與 roads（v6 才有）。 */
+  function v5SaveJson(): string {
+    const raw = JSON.parse(serializeGameState(createInitialState(1))) as Record<string, unknown>;
+    raw.schemaVersion = 5;
+    delete raw.roads;
+    return JSON.stringify(raw);
+  }
+
+  it('SAVE_MIGRATIONS 為空陣列：v6 起不再提供任何遷移', () => {
+    expect(SAVE_MIGRATIONS).toEqual([]);
+  });
+
+  it('v5 存檔 → 丟 OutdatedSaveError，帶 savedVersion=5 與 supportedVersion=6', () => {
+    let caught: unknown;
+    try {
+      deserializeGameState(v5SaveJson());
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(OutdatedSaveError);
+    expect((caught as OutdatedSaveError).savedVersion).toBe(5);
+    expect((caught as OutdatedSaveError).supportedVersion).toBe(SAVE_SCHEMA_VERSION);
+    expect((caught as OutdatedSaveError).name).toBe('OutdatedSaveError');
+  });
+
+  it('v1 存檔 → 同樣 OutdatedSaveError，帶 savedVersion=1（不再鏈式遷移）', () => {
+    expect(() => deserializeGameState(v1SaveJson())).toThrow(OutdatedSaveError);
+
+    let caught: unknown;
+    try {
+      deserializeGameState(v1SaveJson());
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as OutdatedSaveError).savedVersion).toBe(1);
+  });
+
+  it('注入了起始步遷移時仍走遷移路徑，不會被誤判成作廢（遷移機制本身保留）', () => {
+    const state = createInitialState(1);
+    const raw = JSON.parse(serializeGameState(state)) as Record<string, unknown>;
+    raw.schemaVersion = SAVE_SCHEMA_VERSION - 1;
+    const migrations: Migration[] = [
+      { from: SAVE_SCHEMA_VERSION - 1, migrate: (input) => input },
+    ];
+
+    const restored = deserializeGameState(JSON.stringify(raw), migrations);
 
     expect(restored.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
-    expect(restored.tick).toBe(5);
-    expect(restored.rngState).toBe(12345);
-    expect(restored.resources).toEqual({ wood: 10 });
-    expect(restored.buildings).toEqual([{ id: 'house@0,0#0', type: 'house', x: 0, y: 0 }]);
-    expect(restored.pendingCommands).toEqual([{ type: 'addResource', resource: 'wood', amount: 3 }]);
   });
 
-  it('(b) 同一 v1 JSON 以 deserializeGameState(json, []) 呼叫 → throw（版本落後且無對應遷移）', () => {
-    expect(() => deserializeGameState(v1SaveJson(), [])).toThrow();
+  it('遷移鏈中斷（有起始步、缺後續步）→ 一般 Error 而非 OutdatedSaveError（那是 registry 的程式錯誤）', () => {
+    const raw = JSON.parse(serializeGameState(createInitialState(1))) as Record<string, unknown>;
+    raw.schemaVersion = SAVE_SCHEMA_VERSION - 2;
+    const migrations: Migration[] = [
+      { from: SAVE_SCHEMA_VERSION - 2, migrate: (input) => input },
+      // 缺 from=SAVE_SCHEMA_VERSION-1
+    ];
+
+    expect(() => deserializeGameState(JSON.stringify(raw), migrations)).toThrow(/applyMigrations/);
+    expect(() => deserializeGameState(JSON.stringify(raw), migrations)).not.toThrow(OutdatedSaveError);
   });
 
-  it('(c) v1 存檔還原後可用 Simulation 續跑，且還原出的 pending 指令於下一 tick 生效', () => {
-    const restored = deserializeGameState(v1SaveJson());
-    const sim = new Simulation(restored, []);
-
-    sim.tick();
-
-    expect(restored.resources.wood).toBe(13); // 10 + pending 的 addResource wood:3
-    expect(restored.tick).toBe(6);
+  it('作廢的舊檔不是「壞檔」：訊息說得出版本號，供 UI 顯示', () => {
+    expect(() => deserializeGameState(v5SaveJson())).toThrow(/存檔版本 5/);
   });
 });

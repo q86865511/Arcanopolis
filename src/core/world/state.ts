@@ -4,8 +4,9 @@ import { createRng } from '../sim/rng';
 import type { Command } from '../sim/commands';
 import { TERRAIN_GENERATOR_VERSION, type TerrainOverride } from './terrain';
 
-/** 存檔格式版本。新增/變更欄位時遞增，並在 src/core/save/save.ts 補對應 Migration。 */
-export const SAVE_SCHEMA_VERSION = 5;
+/** 存檔格式版本。新增/變更欄位時遞增，並在 src/core/save/save.ts 補對應 Migration
+ *  （v6 起 SAVE_MIGRATIONS 為空，v5 及更早的存檔一律作廢——見該檔的 OutdatedSaveError）。 */
+export const SAVE_SCHEMA_VERSION = 6;
 
 /** 世界邊長（格）預設值。地形本身不進存檔——由 worldSeed + worldSize 程序生成，
  *  只有玩家改動過的格子記在 terrainOverrides，故放大世界不會放大存檔。 */
@@ -19,7 +20,7 @@ export interface Building {
   y: number;
   /**
    * 本批生產的累積工時（tick 為單位）。滿 def.workTicks 時整批產出並扣掉該值。
-   * 省略等同 0——存為選填讓 v4 舊檔不必補欄即可載入，也讓不生產的建築不必帶這個欄位。
+   * 省略等同 0——存為選填讓不生產的建築不必帶這個欄位。
    */
   progress?: number;
 }

@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { SAVE_KEY, clearSave, loadGame, saveGame, type SaveStorage } from '../../src/render/persistence';
 import { createDemoWorld, createSimulationFor } from '../../src/render/demoWorld';
-import { getResource } from '../../src/core/world/state';
+import { getResource, SAVE_SCHEMA_VERSION } from '../../src/core/world/state';
+import { serializeGameState } from '../../src/core/save/save';
 
 function memoryStorage(initial: Record<string, string> = {}): SaveStorage & { data: Record<string, string> } {
   const data = { ...initial };
@@ -87,8 +88,33 @@ describe('沒有存檔 / 存檔壞掉', () => {
   });
 
   it('欄位不合法的存檔回 corrupt', () => {
-    const bad = JSON.stringify({ schemaVersion: 5, tick: -1 });
+    const bad = JSON.stringify({ schemaVersion: SAVE_SCHEMA_VERSION, tick: -1 });
     expect(loadGame(memoryStorage({ [SAVE_KEY]: bad })).status).toBe('corrupt');
+  });
+
+  it('v5 舊檔回 outdated（帶版本號）而不是 corrupt——UI 要說「不相容」不是「讀不回來」', () => {
+    const { state } = createDemoWorld(200);
+    const raw = JSON.parse(serializeGameState(state)) as Record<string, unknown>;
+    raw.schemaVersion = 5;
+    delete raw.roads;
+
+    const outcome = loadGame(memoryStorage({ [SAVE_KEY]: JSON.stringify(raw) }));
+
+    expect(outcome.status).toBe('outdated');
+    if (outcome.status === 'outdated') expect(outcome.savedVersion).toBe(5);
+  });
+
+  it('作廢的舊檔同樣不自動刪除', () => {
+    const { state } = createDemoWorld(200);
+    const raw = JSON.parse(serializeGameState(state)) as Record<string, unknown>;
+    raw.schemaVersion = 5;
+    delete raw.roads;
+    const json = JSON.stringify(raw);
+    const storage = memoryStorage({ [SAVE_KEY]: json });
+
+    loadGame(storage);
+
+    expect(storage.data[SAVE_KEY]).toBe(json);
   });
 
   it('壞掉的存檔不會被自動刪除——玩家可能想手動搶救', () => {
