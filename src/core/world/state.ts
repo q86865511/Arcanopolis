@@ -53,6 +53,12 @@ export interface GameState {
   terrainOverrides: Record<string, TerrainOverride>;
   /** 存檔當下的地形演算法版本（見 terrain.ts 的 TERRAIN_GENERATOR_VERSION） */
   terrainGeneratorVersion: number;
+  /**
+   * 道路格，鍵為 `${x},${y}`、值恆為 1（M6 起）。獨立於 terrainOverrides：
+   * regrowth 會整鍵刪除 terrainOverrides，塞在那裡的道路會被森林再生靜默清掉。
+   * 值固定 1 而非 true／物件，是逼未來擴充走 schema 版本號，不靠靜默相容。
+   */
+  roads: Record<string, 1>;
 }
 
 export function createInitialState(seed: number): GameState {
@@ -73,6 +79,7 @@ export function createInitialState(seed: number): GameState {
     worldSize: DEFAULT_WORLD_SIZE,
     terrainOverrides: {},
     terrainGeneratorVersion: TERRAIN_GENERATOR_VERSION,
+    roads: {},
   };
 }
 

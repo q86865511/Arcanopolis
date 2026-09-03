@@ -415,6 +415,14 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
     }
   }
 
+  // M6-W1 過渡：roads 尚未進 schema 版本（v6 由存檔升版一併補上完整驗證與舊檔作廢），
+  // 這裡先讓欄位在 round-trip 中不遺失；缺欄視為無道路。
+  const rawRoads = raw.roads;
+  if (rawRoads !== undefined && (typeof rawRoads !== 'object' || rawRoads === null || Array.isArray(rawRoads))) {
+    throw new Error(`deserializeGameState: roads 必須是物件，收到 ${typeof rawRoads}`);
+  }
+  const roads = (rawRoads ?? {}) as Record<string, 1>;
+
   const pendingCommands = raw.pendingCommands;
   if (!Array.isArray(pendingCommands)) {
     throw new Error(`deserializeGameState: pendingCommands 必須是陣列，收到 ${typeof pendingCommands}`);
@@ -436,5 +444,6 @@ export function deserializeGameState(json: string, migrations: Migration[] = SAV
     worldSize,
     terrainOverrides: terrainOverrides as Record<string, TerrainOverride>,
     terrainGeneratorVersion,
+    roads,
   };
 }
