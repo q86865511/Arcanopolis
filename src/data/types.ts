@@ -38,6 +38,10 @@ export interface BuildingDef {
    * 同時是建築選單的分組依據：對應 data\eras.json 中 minPopulation ≤ 此值的最高階段。
    */
   unlockAtPopulation?: number;
+  /** 為真代表放置與運作需連通到道路根；M6-W4 才開始強制 */
+  requiresRoad?: boolean;
+  /** 為真代表道路網的根；M6-W4 才加入資料表 */
+  isRoadRoot?: boolean;
   /** 地形規則：on/near 僅限制擺放；consumes 宣告生產時可消耗的地形資源。 */
   terrain?: {
     on?: TerrainType[];
@@ -77,6 +81,14 @@ export interface EconomyConfig {
   /** 市場買入加價率：買價 = basePrice × (1 + marketBuyMarkup)，賣價 = basePrice。
    *  這段價差就是市場的手續費，讓「賣掉再買回」必定虧損，杜絕零成本套利。 */
   marketBuyMarkup: number;
+}
+
+/** 道路常數表，對應 data\roads.json。 */
+export interface RoadsConfig {
+  /** 帶權尋路中非道路格的步進成本；道路格固定為 1 */
+  nonRoadStepCost: number;
+  /** 居民位於道路格時的速度倍率 */
+  speedMultiplierOnRoad: number;
 }
 
 /** 地形資源與森林再生常數，對應 data\terrain-economy.json。 */

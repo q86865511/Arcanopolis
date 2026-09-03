@@ -93,6 +93,21 @@ describe('parseBuildingDefs unlockAtPopulation', () => {
   });
 });
 
+describe('parseBuildingDefs 道路欄位', () => {
+  const resourceIds = new Set(['wood', 'stone', 'gold']);
+
+  it.each(['requiresRoad', 'isRoadRoot'] as const)('%s 僅在 true 時帶入 def', (field) => {
+    const base = validBuildings()[0];
+    const [omitted] = parseBuildingDefs([base], resourceIds);
+    const [disabled] = parseBuildingDefs([{ ...base, [field]: false }], resourceIds);
+    const [enabled] = parseBuildingDefs([{ ...base, [field]: true }], resourceIds);
+
+    expect(Object.prototype.hasOwnProperty.call(omitted, field)).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(disabled, field)).toBe(false);
+    expect(enabled[field]).toBe(true);
+  });
+});
+
 describe('parseBuildingDefs（R2）', () => {
   const resourceIds = new Set(['wood', 'stone', 'gold']);
 

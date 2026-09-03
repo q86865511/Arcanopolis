@@ -1,11 +1,10 @@
 // R1：Citizen 型別＋ GameState.citizens（src/core/world/state.ts）
-// R2：存檔版本升級至 3，SAVE_MIGRATIONS 含 from:1（既有 no-op）與 from:2（補 citizens）
-//     （src/core/save/save.ts）
+// R2：存檔版本（M6-W1 起為 v6；v5 及更早作廢，SAVE_MIGRATIONS 清空）（src/core/save/save.ts）
 // R3：deserializeGameState 對 citizens 欄位的驗證（src/core/save/save.ts）
 import { describe, expect, it } from 'vitest';
 import type { Citizen, GameState } from '../../src/core/world/state';
 import { createInitialState, SAVE_SCHEMA_VERSION } from '../../src/core/world/state';
-import { deserializeGameState, SAVE_MIGRATIONS } from '../../src/core/save/save';
+import { deserializeGameState, OutdatedSaveError, SAVE_MIGRATIONS } from '../../src/core/save/save';
 
 describe('R1：Citizen 型別＋ GameState.citizens', () => {
   it('createInitialState 填入空 citizens 陣列', () => {
@@ -30,14 +29,14 @@ describe('R1：Citizen 型別＋ GameState.citizens', () => {
   });
 });
 
-describe('R2：存檔版本升級至 3（citizens 加入 GameState）', () => {
-  it('SAVE_SCHEMA_VERSION = 5（M4.5-W2：建築新增 progress）', () => {
-    expect(SAVE_SCHEMA_VERSION).toBe(5);
+describe('R2：存檔版本 v6（roads 進 schema，v5 及更早作廢）', () => {
+  it('SAVE_SCHEMA_VERSION = 6（M6-W1：roads 進 schema）', () => {
+    expect(SAVE_SCHEMA_VERSION).toBe(6);
   });
 
-  it('SAVE_MIGRATIONS 含 from:1（no-op）、from:2（補 citizens）、from:3（補地形欄位）、from:4（progress 選填放行）', () => {
+  it('SAVE_MIGRATIONS 不含任何遷移：舊檔不再被補欄位救回來', () => {
     const froms = SAVE_MIGRATIONS.map((m) => m.from).sort((a, b) => a - b);
-    expect(froms).toEqual([1, 2, 3, 4]);
+    expect(froms).toEqual([]);
   });
 
   /** 手工構造的合法 v1 存檔（schemaVersion:1，無 citizens，含一筆 pending addResource）。 */
@@ -66,39 +65,26 @@ describe('R2：存檔版本升級至 3（citizens 加入 GameState）', () => {
     return JSON.stringify(v2);
   }
 
-  it('v1 存檔：預設參數 deserialize 成功，schemaVersion 升為 3、citizens 補為 []、pending 保留', () => {
-    const restored = deserializeGameState(v1SaveJson());
-
-    expect(restored.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
-    expect(restored.citizens).toEqual([]);
-    expect(restored.pendingCommands).toEqual([{ type: 'addResource', resource: 'wood', amount: 3 }]);
+  it('v1 存檔（無 citizens）→ 不再補欄遷移，一律 OutdatedSaveError', () => {
+    expect(() => deserializeGameState(v1SaveJson())).toThrow(OutdatedSaveError);
   });
 
-  it('v2 存檔：預設參數 deserialize 成功，citizens 補為 []、pending 保留', () => {
-    const restored = deserializeGameState(v2SaveJson());
+  it('v2 存檔（無 citizens）→ 同樣 OutdatedSaveError，帶 savedVersion=2', () => {
+    let caught: unknown;
+    try {
+      deserializeGameState(v2SaveJson());
+    } catch (error) {
+      caught = error;
+    }
 
-    expect(restored.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
-    expect(restored.citizens).toEqual([]);
-    expect(restored.pendingCommands).toEqual([{ type: 'placeBuilding', buildingType: 'house', x: 2, y: 3 }]);
+    expect(caught).toBeInstanceOf(OutdatedSaveError);
+    expect((caught as OutdatedSaveError).savedVersion).toBe(2);
   });
 
-  it('deserializeGameState(v2json, []) → throw（版本落後且無對應遷移）', () => {
-    expect(() => deserializeGameState(v2SaveJson(), [])).toThrow();
-  });
-
-  it('v2 存檔已含合法 citizens 陣列 → migrate 缺欄才補，保留原值不被清空', () => {
+  it('v2 存檔即使已含合法 citizens 陣列也照樣作廢——作廢看的是版本號，不是欄位齊不齊', () => {
     const v2 = JSON.parse(v2SaveJson());
     v2.citizens = [{ id: 'c1', home: 'house@0,0#0', job: null, x: 0, y: 0 }];
-    const restored = deserializeGameState(JSON.stringify(v2));
-
-    expect(restored.schemaVersion).toBe(SAVE_SCHEMA_VERSION);
-    expect(restored.citizens).toEqual([{ id: 'c1', home: 'house@0,0#0', job: null, x: 0, y: 0 }]);
-  });
-
-  it('v2 存檔的 citizens 為非法值（字串）→ migrate 保留原值，交後續 v3 validator 拒收', () => {
-    const v2 = JSON.parse(v2SaveJson());
-    v2.citizens = 'not-an-array';
-    expect(() => deserializeGameState(JSON.stringify(v2))).toThrow(/citizens/);
+    expect(() => deserializeGameState(JSON.stringify(v2))).toThrow(OutdatedSaveError);
   });
 });
 

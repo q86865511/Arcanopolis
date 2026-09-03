@@ -1,14 +1,9 @@
 // R4：GameState 擴充 worldSeed/worldSize/terrainOverrides（src/core/world/state.ts）
-// R6：存檔 v4（SAVE_SCHEMA_VERSION、SAVE_MIGRATIONS 的 from:3、deserializeGameState 新欄位驗證）
+// R6：存檔 v6（SAVE_SCHEMA_VERSION、舊檔作廢、deserializeGameState 的欄位驗證含 roads）
 import { describe, expect, it } from 'vitest';
 import { createInitialState, SAVE_SCHEMA_VERSION, type GameState } from '../../src/core/world/state';
-import {
-  serializeGameState,
-  deserializeGameState,
-  applyMigrations,
-  SAVE_MIGRATIONS,
-} from '../../src/core/save/save';
-import { TERRAIN_GENERATOR_VERSION, terrainAt, type TerrainOverride } from '../../src/core/world/terrain';
+import { deserializeGameState, OutdatedSaveError, serializeGameState } from '../../src/core/save/save';
+import { TERRAIN_GENERATOR_VERSION, type TerrainOverride } from '../../src/core/world/terrain';
 
 describe('R4：GameState 擴充 worldSeed/worldSize/terrainOverrides', () => {
   it('createInitialState(seed) 預設 worldSeed=seed、worldSize=200、terrainOverrides={}', () => {
@@ -43,76 +38,12 @@ describe('R4：GameState 擴充 worldSeed/worldSize/terrainOverrides', () => {
   });
 });
 
-describe('R6：存檔 v5——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3/from:4)', () => {
-  it('SAVE_SCHEMA_VERSION = 5（M4.5-W2：建築新增 progress）', () => {
-    expect(SAVE_SCHEMA_VERSION).toBe(5);
+describe('R6：存檔 v6——SAVE_SCHEMA_VERSION 與舊檔作廢', () => {
+  it('SAVE_SCHEMA_VERSION = 6（M6-W1：roads 進 schema）', () => {
+    expect(SAVE_SCHEMA_VERSION).toBe(6);
   });
 
-  it('SAVE_MIGRATIONS 含 from:3 的遷移', () => {
-    const migration = SAVE_MIGRATIONS.find((m) => m.from === 3);
-    expect(migration).toBeDefined();
-  });
-
-  it('from:3 遷移：缺 worldSeed 時用 raw.rngState 補；缺 worldSize 時補 200；缺 terrainOverrides 時補 {}', () => {
-    const migration = SAVE_MIGRATIONS.find((m) => m.from === 3)!;
-    const raw = {
-      schemaVersion: 3,
-      tick: 1,
-      rngState: 999,
-      resources: {},
-      buildings: [],
-      citizens: [],
-      pendingCommands: [],
-    };
-
-    const migrated = migration.migrate(raw) as Record<string, unknown>;
-
-    expect(migrated.worldSeed).toBe(999);
-    expect(migrated.worldSize).toBe(200);
-    expect(migrated.terrainOverrides).toEqual({});
-  });
-
-  it('from:3 遷移：raw 缺 rngState（或非數值）時，worldSeed 退回固定值 1', () => {
-    const migration = SAVE_MIGRATIONS.find((m) => m.from === 3)!;
-    const rawNoRngState = {
-      schemaVersion: 3,
-      tick: 1,
-      resources: {},
-      buildings: [],
-      citizens: [],
-      pendingCommands: [],
-    };
-    const migratedA = migration.migrate(rawNoRngState) as Record<string, unknown>;
-    expect(migratedA.worldSeed).toBe(1);
-
-    const rawBadRngState = { ...rawNoRngState, rngState: 'not-a-number' };
-    const migratedB = migration.migrate(rawBadRngState) as Record<string, unknown>;
-    expect(migratedB.worldSeed).toBe(1);
-  });
-
-  it('from:3 遷移：raw 已有 worldSeed/worldSize/terrainOverrides 時一律保留原值，不覆蓋（比照 from:2 的「缺欄才補」慣例）', () => {
-    const migration = SAVE_MIGRATIONS.find((m) => m.from === 3)!;
-    const raw = {
-      schemaVersion: 3,
-      tick: 1,
-      rngState: 999,
-      resources: {},
-      buildings: [],
-      citizens: [],
-      pendingCommands: [],
-      worldSeed: 12345,
-      worldSize: 500,
-      terrainOverrides: { '1,1': { type: 'sand' } },
-    };
-
-    const migrated = migration.migrate(raw) as Record<string, unknown>;
-
-    expect(migrated.worldSeed).toBe(12345);
-    expect(migrated.worldSize).toBe(500);
-    expect(migrated.terrainOverrides).toEqual({ '1,1': { type: 'sand' } });
-  });
-
-  it('端到端：手工構造 v3 存檔（無新欄位）→ 預設參數 deserialize 成功、schemaVersion===5、三個新欄位補上', () => {
+  it('手工構造的 v3 存檔（無地形欄位）→ 不再補欄遷移，一律 OutdatedSaveError', () => {
     const v3 = {
       schemaVersion: 3,
       tick: 5,
@@ -123,97 +54,17 @@ describe('R6：存檔 v5——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3/fro
       pendingCommands: [],
     };
 
-    const restored = deserializeGameState(JSON.stringify(v3));
-
-    expect(restored.schemaVersion).toBe(5);
-    expect(restored.worldSeed).toBe(777);
-    expect(restored.worldSize).toBe(200);
-    expect(restored.terrainOverrides).toEqual({});
-    expect(restored.tick).toBe(5);
-    expect(restored.resources).toEqual({ wood: 10 });
+    expect(() => deserializeGameState(JSON.stringify(v3))).toThrow(OutdatedSaveError);
   });
 
-  it('deserializeGameState(v3json, []) → throw（版本落後且未提供遷移）', () => {
-    const v3 = {
-      schemaVersion: 3,
-      tick: 0,
-      rngState: 1,
-      resources: {},
-      buildings: [],
-      citizens: [],
-      pendingCommands: [],
-    };
-    expect(() => deserializeGameState(JSON.stringify(v3), [])).toThrow();
-  });
-
-  it('v1 舊存檔可鏈式遷移到 v5（1→2→3→4→5 全部套用）', () => {
-    const v1 = {
-      schemaVersion: 1,
-      tick: 5,
-      rngState: 12345,
-      resources: { wood: 10 },
-      buildings: [{ id: 'house@0,0#0', type: 'house', x: 0, y: 0 }],
-      pendingCommands: [{ type: 'addResource', resource: 'wood', amount: 3 }],
-    };
-
-    const restored = deserializeGameState(JSON.stringify(v1));
-
-    expect(restored.schemaVersion).toBe(5);
-    expect(restored.citizens).toEqual([]);
-    expect(restored.worldSeed).toBe(12345); // 補自 rngState
-    expect(restored.worldSize).toBe(200);
-    // C2：建築 (0,0) 是舊檔升版後的腳下保護對象——(0,0) 是世界角落，baseTerrainAt 恆為 water，
-    // 若不補 grass override 這棟建築升版後就會站在海裡。
-    expect(restored.terrainOverrides).toEqual({ '0,0': { type: 'grass' } });
-    expect(restored.terrainGeneratorVersion).toBe(TERRAIN_GENERATOR_VERSION);
-  });
-
-  it('v2 舊存檔（已有 citizens，缺地形欄位）可遷移到 v5', () => {
-    const v2 = {
-      schemaVersion: 2,
-      tick: 1,
-      rngState: 42,
-      resources: {},
-      buildings: [],
-      citizens: [{ id: 'c1', home: 'h1', job: null, x: 1, y: 1 }],
-      pendingCommands: [],
-    };
-
-    const restored = deserializeGameState(JSON.stringify(v2));
-
-    expect(restored.schemaVersion).toBe(5);
-    expect(restored.citizens).toEqual([{ id: 'c1', home: 'h1', job: null, x: 1, y: 1 }]);
-    expect(restored.worldSeed).toBe(42);
-    expect(restored.worldSize).toBe(200);
-    // C2：居民 (1,1) 的腳下保護，理由同上。
-    expect(restored.terrainOverrides).toEqual({ '1,1': { type: 'grass' } });
-  });
-
-  it('deserializeGameState 對 schemaVersion===SAVE_SCHEMA_VERSION(4) 的存檔可正常 round-trip', () => {
+  it('deserializeGameState 對 schemaVersion===SAVE_SCHEMA_VERSION 的存檔可正常 round-trip', () => {
     const state = createInitialState(9);
     const json = serializeGameState(state);
     const restored = deserializeGameState(json);
     expect(restored).toEqual(state);
   });
 
-  it('C1：from:3 遷移缺 terrainGeneratorVersion 時補目前的 TERRAIN_GENERATOR_VERSION', () => {
-    const migration = SAVE_MIGRATIONS.find((m) => m.from === 3)!;
-    const raw = {
-      schemaVersion: 3,
-      tick: 1,
-      rngState: 999,
-      resources: {},
-      buildings: [],
-      citizens: [],
-      pendingCommands: [],
-    };
-
-    const migrated = migration.migrate(raw) as Record<string, unknown>;
-
-    expect(migrated.terrainGeneratorVersion).toBe(TERRAIN_GENERATOR_VERSION);
-  });
-
-  it('C1：schemaVersion=4 但 terrainGeneratorVersion 大於程式目前支援版本 → throw（存檔的地形演算法版本比程式新）', () => {
+  it('C1：terrainGeneratorVersion 大於程式目前支援版本 → throw（存檔的地形演算法版本比程式新）', () => {
     const state = createInitialState(1);
     const json = JSON.stringify({ ...state, terrainGeneratorVersion: TERRAIN_GENERATOR_VERSION + 1 });
     expect(() => deserializeGameState(json)).toThrow(/地形演算法版本比程式新/);
@@ -239,24 +90,6 @@ describe('R6：存檔 v5——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3/fro
     expect(restored.terrainGeneratorVersion).toBe(TERRAIN_GENERATOR_VERSION);
   });
 
-  it('C2：手工 v3 檔含建築 (7,3) 與居民 (2.4, 8.6) → 遷移後 terrainAt 於 (7,3) 與 (2,9) 為 grass', () => {
-    const v3 = {
-      schemaVersion: 3,
-      tick: 0,
-      rngState: 1,
-      resources: {},
-      buildings: [{ id: 'b1', type: 'house', x: 7, y: 3 }],
-      citizens: [{ id: 'c1', home: 'b1', job: null, x: 2.4, y: 8.6 }],
-      pendingCommands: [],
-    };
-
-    const restored = deserializeGameState(JSON.stringify(v3));
-
-    expect(terrainAt(restored, 7, 3)).toBe('grass');
-    // Math.round(2.4)=2, Math.round(8.6)=9
-    expect(terrainAt(restored, 2, 9)).toBe('grass');
-  });
-
   it('C4：createInitialState(-1) 的 worldSeed 正規化為 4294967295，且可 serialize→deserialize', () => {
     const state = createInitialState(-1);
     expect(state.worldSeed).toBe(4294967295);
@@ -264,7 +97,21 @@ describe('R6：存檔 v5——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3/fro
     expect(restored.worldSeed).toBe(4294967295);
   });
 
-  it('F1：serializeGameState 對 citizens 超過上限（100000）或 terrainOverrides 鍵數超過上限（200000）→ throw', () => {
+  it('F1b：serializeGameState 對 roads 的鍵格式／座標／值做與 deserialize 對稱的驗證（Codex 第二審 M6-W1）', () => {
+    const outOfWorld = createInitialState(1);
+    outOfWorld.roads = { [`${outOfWorld.worldSize},0`]: 1 };
+    expect(() => serializeGameState(outOfWorld)).toThrow(/roads 鍵座標超出世界範圍/);
+
+    const leadingZero = createInitialState(1);
+    leadingZero.roads = { '01,0': 1 };
+    expect(() => serializeGameState(leadingZero)).toThrow(/roads 鍵格式不合法/);
+
+    const wrongValue = createInitialState(1);
+    (wrongValue as unknown as { roads: Record<string, number> }).roads = { '1,1': 2 };
+    expect(() => serializeGameState(wrongValue)).toThrow(/必須是 1/);
+  });
+
+  it('F1：serializeGameState 對 citizens／terrainOverrides／roads 超過上限（100000/200000/200000）→ throw', () => {
     const stateWithTooManyCitizens = createInitialState(1);
     (stateWithTooManyCitizens as GameState).citizens = Array.from({ length: 100001 }, (_, i) => ({
       id: `c${i}`,
@@ -283,6 +130,15 @@ describe('R6：存檔 v5——SAVE_SCHEMA_VERSION 與 SAVE_MIGRATIONS(from:3/fro
     }
     (stateWithTooManyOverrides as GameState).terrainOverrides = overrides;
     expect(() => serializeGameState(stateWithTooManyOverrides)).toThrow(/terrainOverrides/);
+
+    const stateWithTooManyRoads = createInitialState(1);
+    stateWithTooManyRoads.worldSize = 500;
+    const roads: Record<string, 1> = {};
+    for (let i = 0; i < 200001; i++) {
+      roads[`${i % 500},${Math.floor(i / 500)}`] = 1;
+    }
+    stateWithTooManyRoads.roads = roads;
+    expect(() => serializeGameState(stateWithTooManyRoads)).toThrow(/roads/);
   });
 
   it('F5：worldSize 低於下限 10 → throw；恰為 10 則不因此 throw', () => {
@@ -424,4 +280,91 @@ describe('R6：deserializeGameState 欄位驗證——terrainOverrides', () => {
       deserializeGameState(v4Json({ worldSize: boundsWorldSize, terrainOverrides: buildOverrides(200000) })),
     ).not.toThrow();
   }, 15000);
+});
+
+describe('M6-W1：roads 的 round-trip 與欄位驗證', () => {
+  function v6Json(overrides: Record<string, unknown> = {}): string {
+    const state = createInitialState(1);
+    return JSON.stringify({ ...state, ...overrides });
+  }
+
+  it('createInitialState 的 roads 為空物件', () => {
+    expect(createInitialState(1).roads).toEqual({});
+  });
+
+  it('鋪了幾格路 → serialize/deserialize 後完全相等', () => {
+    const state = createInitialState(1);
+    state.roads['3,4'] = 1;
+    state.roads['3,5'] = 1;
+    state.roads['0,0'] = 1;
+
+    const restored = deserializeGameState(serializeGameState(state));
+
+    expect(restored.roads).toEqual({ '3,4': 1, '3,5': 1, '0,0': 1 });
+    expect(restored).toEqual(state);
+  });
+
+  it('缺 roads 欄位 → throw（v6 起是必填，不靜默補空物件）', () => {
+    const raw = JSON.parse(serializeGameState(createInitialState(1))) as Record<string, unknown>;
+    delete raw.roads;
+    expect(() => deserializeGameState(JSON.stringify(raw))).toThrow(/roads/);
+  });
+
+  it('roads 非物件（陣列/字串/數字/null）→ throw 且訊息含欄位名', () => {
+    expect(() => deserializeGameState(v6Json({ roads: [] }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ roads: 'nope' }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ roads: 5 }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ roads: null }))).toThrow(/roads/);
+  });
+
+  it('roads 鍵格式不合法（非 "x,y"、負數、前導零）→ throw', () => {
+    expect(() => deserializeGameState(v6Json({ roads: { 'a,b': 1 } }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ roads: { '-1,0': 1 } }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ roads: { '01,0': 1 } }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ roads: { '1': 1 } }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ roads: { '1,2,3': 1 } }))).toThrow(/roads/);
+  });
+
+  it('roads 鍵座標 ≥ worldSize → throw；界內則通過', () => {
+    expect(() => deserializeGameState(v6Json({ worldSize: 10, roads: { '10,0': 1 } }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ worldSize: 10, roads: { '0,10': 1 } }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ worldSize: 10, roads: { '9,9': 1 } }))).not.toThrow();
+  });
+
+  it('roads 的值不是嚴格 1（true/2/"1"/null/物件）→ throw', () => {
+    expect(() => deserializeGameState(v6Json({ roads: { '1,1': true } }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ roads: { '1,1': 2 } }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ roads: { '1,1': '1' } }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ roads: { '1,1': null } }))).toThrow(/roads/);
+    expect(() => deserializeGameState(v6Json({ roads: { '1,1': { level: 1 } } }))).toThrow(/roads/);
+  });
+
+  it('roads 鍵數超過上限 200000 → throw；恰為上限則不因此 throw', () => {
+    // 比照 terrainOverrides 的上限測試：worldSize 放大到 500 讓 200001 個鍵全落在界內，
+    // 單純測「鍵數上限」而不誤觸座標越界檢查。
+    const boundsWorldSize = 500;
+    function buildRoads(n: number): Record<string, 1> {
+      const result: Record<string, 1> = {};
+      for (let i = 0; i < n; i++) {
+        result[`${i % boundsWorldSize},${Math.floor(i / boundsWorldSize)}`] = 1;
+      }
+      return result;
+    }
+
+    expect(() =>
+      deserializeGameState(v6Json({ worldSize: boundsWorldSize, roads: buildRoads(200001) })),
+    ).toThrow(/roads/);
+
+    expect(() =>
+      deserializeGameState(v6Json({ worldSize: boundsWorldSize, roads: buildRoads(200000) })),
+    ).not.toThrow();
+  }, 15000);
+
+  it('道路蓋在水上也照樣讀得回來：地形是 seed 推導的，追溯拒收會讓合法舊檔變壞檔', () => {
+    // (0,0) 是世界角落，baseTerrainAt 恆為 water（見 terrain.ts 的角落保證）。
+    const state = createInitialState(1);
+    state.roads['0,0'] = 1;
+
+    expect(() => deserializeGameState(serializeGameState(state))).not.toThrow();
+  });
 });

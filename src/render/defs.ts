@@ -7,9 +7,10 @@ import resourcesJson from '../../data/resources.json';
 import terrainEconomyJson from '../../data/terrain-economy.json';
 import economyJson from '../../data/economy.json';
 import populationJson from '../../data/population.json';
+import roadsJson from '../../data/roads.json';
 import erasJson from '../../data/eras.json';
 import terrainJson from '../../data/terrain.json';
-import { parseBuildingDefs, parseEconomyConfig, parseEraDefs, parsePopulationConfig, parseResourceDefs, parseTerrainDefs, parseTerrainEconomy } from '../data/loader';
+import { parseBuildingDefs, parseEconomyConfig, parseEraDefs, parsePopulationConfig, parseResourceDefs, parseRoadsConfig, parseTerrainDefs, parseTerrainEconomy } from '../data/loader';
 import type { BuildingDef } from '../data/types';
 
 export const RESOURCE_DEFS = parseResourceDefs(resourcesJson);
@@ -22,6 +23,8 @@ export const ECONOMY_CONFIG = parseEconomyConfig(economyJson);
 
 /** HUD 的人口診斷（resourceDiagnostics.ts）需要與 population system 同一份門檻常數。 */
 export const POPULATION_CONFIG = parsePopulationConfig(populationJson);
+
+export const ROADS_CONFIG = parseRoadsConfig(roadsJson);
 
 /** 時代階段：建築選單頁籤的分組與命名來源。 */
 export const ERA_DEFS = parseEraDefs(erasJson);
