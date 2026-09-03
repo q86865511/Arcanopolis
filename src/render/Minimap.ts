@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { terrainAt, type TerrainType } from '../core/world/terrain';
+import { hasRoad } from '../core/world/roads';
 import type { GameState } from '../core/world/state';
 import { TILE_H, screenToGrid } from './iso';
 
@@ -16,6 +17,10 @@ const TERRAIN_COLOR: Readonly<Record<TerrainType, readonly [number, number, numb
   rock: [124, 132, 139],
   mountain: [83, 73, 96],
 };
+
+// 道路蓋過地形色：路網的形狀是玩家在小地圖上要讀的第一件事，被底下的草綠切斷就看不出連通。
+// 選暖土色而非中性灰——六種地形色裡只有 sand 偏暖，而 sand 亮得多，兩者在 160px 縮圖上仍分得開。
+const ROAD_COLOR: readonly [number, number, number] = [150, 106, 62];
 
 export interface MinimapTile {
   x: number;
@@ -94,7 +99,7 @@ export class Minimap {
     if (tiles.length === 0) return;
     for (const tile of tiles) {
       if (tile.x < 0 || tile.y < 0 || tile.x >= this.state.worldSize || tile.y >= this.state.worldSize) continue;
-      const [r, g, b] = TERRAIN_COLOR[terrainAt(this.state, tile.x, tile.y)];
+      const [r, g, b] = this.colorAt(tile.x, tile.y);
       this.context.fillStyle = `rgb(${r}, ${g}, ${b})`;
       this.context.fillRect(tile.x, tile.y, 1, 1);
     }
@@ -127,6 +132,12 @@ export class Minimap {
     return this.objects;
   }
 
+  /** 一格在小地圖上的代表色：有路畫路色，否則畫地形色。 */
+  private colorAt(x: number, y: number): readonly [number, number, number] {
+    if (hasRoad(this.state, x, y)) return ROAD_COLOR;
+    return TERRAIN_COLOR[terrainAt(this.state, x, y)];
+  }
+
   private drawAllTerrain(): void {
     const size = this.state.worldSize;
     const image = this.context.createImageData(size, size);
@@ -134,7 +145,7 @@ export class Minimap {
     let offset = 0;
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        const [r, g, b] = TERRAIN_COLOR[terrainAt(this.state, x, y)];
+        const [r, g, b] = this.colorAt(x, y);
         data[offset] = r;
         data[offset + 1] = g;
         data[offset + 2] = b;

@@ -2,7 +2,7 @@
 
 ## 目前狀態
 
-**M5 看得見的城市全部完成、M6 道路與城市規劃進行中（W1 資料層完成 2026-09-03，存檔 v6、舊檔作廢），待使用者實玩驗收（一律開新地圖 `?new=1`）**。地形定調（暗橄欖）、
+**M5 看得見的城市全部完成、M6 道路與城市規劃進行中（W1 資料層、W2 鋪路工具完成 2026-09-03；道路仍是純裝飾，W3 起影響路徑），待使用者實玩驗收（一律開新地圖 `?new=1`）**。地形定調（暗橄欖）、
 變體混鋪＋裝飾散佈、斜坡裙邊、2×2 tavern＋麥酒＋12 張建築重生、全畫面色調統一
 全部落地；724 tests 綠、tsc 零錯誤。剩餘素材債見 W4 已完成條目。
 （美術方向定案脈絡：六方向 spike 評估後以世紀帝國 II 為北極星留在 2D tile 架構，
@@ -15,6 +15,14 @@
 
 ## 已完成
 
+- [2026-09-03] **M6-W2 鋪路／拆路指令＋道路渲染＋道路工具**（typecheck/848 tests/build 全綠，+17 tests；平衡曲線與基準 diff 為空）。
+  core：`placeRoad`（世界內→地形可建→無建築佔格→無既有路→成本原子扣款，`roads.json` 每格 stone 1）、`removeRoad`（免費不退，防鋪拆刷資源）；
+  `Simulation` 第 5 個選填引數注入 `RoadsConfig`，未注入一律靜默跳過（舊呼叫端行為不變）；`canBuildAt` 拒絕 footprint 覆蓋道路格。
+  render：地形烘焙在道路格疊畫 `tile-dirt-01`（道路格不長 decor）、道路變動走與 terrainOverrides 相同的快照 diff → invalidateTile ＋ 小地圖同步（小地圖加暖土色）；
+  選單每頁固定多一個「道路」格（快捷鍵 `R`，不受人口解鎖），左鍵逐格鋪、右鍵逐格拆（不走拆建築的二次確認），說明列顯示成本；
+  格數上限 11 改由 `BuildingPalette.PALETTE_SLOT_COUNT` 單一來源。**本波刻意不做拖曳連鋪**（與 CLICK_SLOP 分流衝突，留後續）。
+  截圖腳本 `--click` 支援分號串多點。分工：core Codex、render Claude architect；截圖三張目視（帶路存檔、工具鋪兩格石材 -2、未解鎖頁籤 R 仍亮）。
+  **美術債登記**：`tile-dirt-01` 是定調前的亮橘紅素材，目前用 `ROAD_TINT`（0x8c7a5e）壓暗過渡；正式解法是依 art-bible 重生路面 tile 後把 tint 改回白。
 - [2026-09-03] **M6-W1 道路資料層**（typecheck/828 tests/build 全綠，+23 tests；平衡曲線 31 行 CSV 與改前 diff 為空）。
   `GameState.roads: Record<string, 1>` 獨立稀疏 map（不塞 terrainOverrides：regrowth 整鍵刪除會把同格道路清掉）；
   存檔 schema **5→6**，roads 正式驗證（鍵格式同 terrainOverrides、座標 < worldSize、值嚴格 1、MAX_ROADS 200000、serialize 對稱守門），
@@ -420,7 +428,7 @@
 ## 進行中
 
 - **M6 道路與城市規劃**（設計原文：`C:\Users\q86865511\.claude\backups\plans-archive\c-users-q86865511-appdata-local-temp-cl-starry-flute.md` 第 95–219 行）：
-  ~~W1 資料層~~ 完成 → W2 指令＋渲染＋道路工具 → W3 bucketSearch 帶權尋路（硬門檻：400 張地圖等價 mismatch=0）
+  ~~W1 資料層~~ → ~~W2 指令＋渲染＋道路工具~~ 完成 → W3 bucketSearch 帶權尋路（硬門檻：400 張地圖等價 mismatch=0）
   → W4 連通性 system＋主堡（規格斷點，整波完成才 commit）→ W5 道路速度加成＋平衡再校準。
 
 （無——M2 已收尾，待使用者實玩驗收）

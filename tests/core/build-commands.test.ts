@@ -16,6 +16,7 @@ import { Simulation } from '../../src/core/sim/simulation';
 import { footprintTiles, isAreaFree } from '../../src/core/world/occupancy';
 import { serializeGameState, deserializeGameState } from '../../src/core/save/save';
 import type { BuildingDef } from '../../src/data/types';
+import { placeRoad } from '../../src/core/world/roads';
 
 // 精簡 fixture defs：不依賴 data/*.json，涵蓋單資源成本、多資源成本、非 1×1 佔地
 const houseDef: BuildingDef = {
@@ -324,6 +325,22 @@ describe('R8：applyCommand 窮盡守衛', () => {
     const bogus = { type: 'bogus' } as unknown as Command;
 
     expect(() => applyCommand(state, bogus)).toThrow();
+  });
+});
+
+describe('M6-W2：placeBuilding 不可覆蓋道路', () => {
+  it('道路格即使地形與資源皆合法仍靜默跳過，且不扣建造成本', () => {
+    const state = createInitialState(1);
+    state.terrainOverrides['4,4'] = { type: 'grass' };
+    state.resources.wood = 100;
+    expect(placeRoad(state, 4, 4)).toBe(true);
+    const sim = new Simulation(state, [], defs);
+
+    sim.enqueue({ type: 'placeBuilding', buildingType: 'house', x: 4, y: 4 });
+    sim.tick();
+
+    expect(state.buildings).toEqual([]);
+    expect(getResource(state, 'wood')).toBe(100);
   });
 });
 

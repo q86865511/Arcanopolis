@@ -2,6 +2,7 @@ import buildingsJson from '../../data/buildings.json';
 import economyJson from '../../data/economy.json';
 import populationJson from '../../data/population.json';
 import resourcesJson from '../../data/resources.json';
+import roadsJson from '../../data/roads.json';
 import terrainEconomyJson from '../../data/terrain-economy.json';
 import type { Command } from '../core/sim/commands';
 import { Simulation } from '../core/sim/simulation';
@@ -15,6 +16,7 @@ import {
   parseEconomyConfig,
   parsePopulationConfig,
   parseResourceDefs,
+  parseRoadsConfig,
   parseTerrainEconomy,
 } from '../data/loader';
 import type { BuildingDef } from '../data/types';
@@ -29,6 +31,7 @@ const RESOURCE_IDS = new Set(RESOURCE_DEFS.map((def) => def.id));
 const BUILDING_DEFS = parseBuildingDefs(buildingsJson, RESOURCE_IDS);
 const POPULATION_CONFIG = parsePopulationConfig(populationJson);
 const ECONOMY_CONFIG = parseEconomyConfig(economyJson);
+const ROADS_CONFIG = parseRoadsConfig(roadsJson);
 const TERRAIN_ECONOMY = parseTerrainEconomy(terrainEconomyJson);
 
 const STRATEGY_INTERVAL_TICKS = 60;
@@ -346,10 +349,16 @@ export function createBalanceWorld(seed = 1, worldSize?: number): BalanceWorld {
     economyConfig: ECONOMY_CONFIG,
     bounds: { w: state.worldSize, h: state.worldSize },
   });
-  const simulation = new Simulation(state, systems, BUILDING_DEFS, {
-    resourceDefs: RESOURCE_DEFS,
-    economy: ECONOMY_CONFIG,
-  });
+  const simulation = new Simulation(
+    state,
+    systems,
+    BUILDING_DEFS,
+    {
+      resourceDefs: RESOURCE_DEFS,
+      economy: ECONOMY_CONFIG,
+    },
+    ROADS_CONFIG,
+  );
   return { state, simulation };
 }
 

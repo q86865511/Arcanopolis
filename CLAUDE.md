@@ -43,7 +43,8 @@
 - 視覺驗證截圖：`npm run screenshot -- [--out path.png] [--wait ms] [--port n] [--center gx,gy] [--click x,y] [--hover x,y] [--query new=1&tick=N] [--storage file.json]`
   ——自起 vite（預設 5199）→ chromium 截圖 → 關閉；頁面無 canvas 或有 pageerror 時 exit 1。
   `--center` 把鏡頭移到指定格（驗證海岸線、礦脈等開局視野外的地方）。
-  `--click`／`--hover` 是畫面像素座標，截圖前先點一下、再移滑鼠過去（驗切頁籤、懸停資訊卡這類互動後才出現的 UI）。
+  `--click`／`--hover` 是畫面像素座標，截圖前先點一下、再移滑鼠過去（驗切頁籤、懸停資訊卡這類互動後才出現的 UI）；
+  `--click` 可用分號串多點依序點（`--click "784,667;250,480"`，驗選工具再鋪格這類多步操作）。
   `--query` 原樣附到 URL：`new=1` 開新局不讀存檔、`tick=N` 開局快轉（驗日夜、人口門檻這類要等的狀態）。
   `--storage` 讀 JSON（key→value）在載入前塞進 localStorage（驗「讀到某種存檔」的路徑，如舊版存檔文案）。
   **交給使用者實玩驗收一律給全新地圖**（2026-09-03 使用者指定）：回報時附 `?new=1` 的網址，不要讓他續舊存檔。

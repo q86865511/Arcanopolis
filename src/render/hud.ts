@@ -6,8 +6,9 @@
 // 另一台 zoom=1 的攝影機渲染，displayObjects 就是給 CityScene 設定忽略清單用的。
 
 import Phaser from 'phaser';
-import { BUILDING_DEFS, POPULATION_CONFIG, RESOURCE_DEFS, resourceName } from './defs';
-import { BuildingPalette } from './BuildingPalette';
+import { BUILDING_DEFS, POPULATION_CONFIG, RESOURCE_DEFS, ROADS_CONFIG, resourceName } from './defs';
+import { BuildingPalette, PALETTE_SLOT_COUNT } from './BuildingPalette';
+import type { BuildPick } from './buildingSelection';
 import { BuildingInfoPanel } from './BuildingInfoPanel';
 import { MarketPanel } from './MarketPanel';
 import {
@@ -58,8 +59,6 @@ const BAR_EDGE_COLOR = UI_COLOR.brass;
 /** 上/下資訊列高度（畫面座標）。匯出給 BuildController 用：游標壓在列上時要停用建造預覽/點擊，
  *  否則透過 HUD 文字底下的世界格子仍會被誤觸建造/拆除。 */
 export const TOP_BAR_H = 28;
-/** 一頁的格子數，與 BuildingPalette 的快捷鍵表一致；下列高度由格子邊長決定。 */
-const PALETTE_SLOT_COUNT = 10;
 
 /** 下列高度隨視窗寬度變動（窄視窗時格子會縮小），因此是函式而非常數。
  *  BuildController 的 HUD 死區判定必須用同一個值，否則死區會與實際列高錯開，
@@ -147,7 +146,7 @@ export class Hud {
   private palette!: BuildingPalette;
   private infoPanel!: BuildingInfoPanel;
   private market!: MarketPanel;
-  private selectedDef: BuildingDef | null = null;
+  private selected: BuildPick | null = null;
   private speedText!: Phaser.GameObjects.Text;
   private timeText!: Phaser.GameObjects.Text;
   private speed: GameSpeed = INITIAL_SPEED;
@@ -159,8 +158,8 @@ export class Hud {
     private readonly scene: Phaser.Scene,
     private readonly state: GameState,
     private readonly sim: Simulation,
-    /** 點擊選單格子時回呼；由 CityScene 接到 BuildController.selectDef 上。 */
-    private readonly onPickBuilding: (def: BuildingDef) => void = () => {},
+    /** 點擊選單格子時回呼（建築或道路格）；由 CityScene 接到 BuildController.selectDef 上。 */
+    private readonly onPickBuilding: (pick: BuildPick) => void = () => {},
     /** 點擊時代頁籤時回呼；由 CityScene 接到 BuildController.selectTab 上。 */
     private readonly onPickTab: (tab: number) => void = () => {},
   ) {}
@@ -190,7 +189,7 @@ export class Hud {
       this.scene,
       this.state,
       HUD_DEPTH + 1,
-      (def) => this.onPickBuilding(def),
+      (pick) => this.onPickBuilding(pick),
       (tab) => this.onPickTab(tab),
       (def, rect) => this.handlePaletteHover(def, rect),
     );
@@ -356,10 +355,10 @@ export class Hud {
     this.minimap.updateViewport(camera);
   }
 
-  setSelection(def: BuildingDef | null, tab = 0): void {
-    this.selectedDef = def;
+  setSelection(pick: BuildPick | null, tab = 0): void {
+    this.selected = pick;
     this.palette.setTab(tab);
-    this.palette.setSelected(def);
+    this.palette.setSelected(pick);
     this.renderDetailLine();
   }
 
@@ -374,9 +373,7 @@ export class Hud {
       this.selectionText.setText(this.notice);
       this.selectionText.setColor(NOTICE_COLOR);
     } else {
-      this.selectionText.setText(
-        this.selectedDef === null ? selectHint() : this.formatSelection(this.selectedDef),
-      );
+      this.selectionText.setText(this.formatSelected());
       this.selectionText.setColor(TEXT_COLOR);
     }
     this.fitSelectionTextToWidth();
@@ -491,9 +488,21 @@ export class Hud {
     return image;
   }
 
+  private formatSelected(): string {
+    if (this.selected === null) return selectHint();
+    if (this.selected === 'road') return this.formatRoadSelection();
+    return this.formatSelection(this.selected);
+  }
+
   private formatSelection(def: BuildingDef): string {
     void resourceName;
     const costText = BuildingPalette.formatCost(def, this.state);
     return `已選 ${def.name}　成本 ${costText}　左鍵放置 / 右鍵拆除 / Esc 取消`;
+  }
+
+  /** 成本字串由 ROADS_CONFIG 組出，不寫死：改 data\roads.json 的 cost 這行要跟著變。 */
+  private formatRoadSelection(): string {
+    const costText = BuildingPalette.formatCostEntries(ROADS_CONFIG.cost, this.state);
+    return `道路：${costText}／格　左鍵鋪　右鍵拆　Esc 取消`;
   }
 }

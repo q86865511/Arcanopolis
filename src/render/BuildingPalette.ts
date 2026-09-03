@@ -15,9 +15,17 @@ import Phaser from 'phaser';
 import { getResource, type GameState } from '../core/world/state';
 import { isBuildingUnlocked } from '../data/eras';
 import type { BuildingDef } from '../data/types';
-import { buildingTextureKey } from './assets';
-import { buildingsOnTab, eraTabLabel, wrapTab } from './buildingSelection';
-import { BUILDING_DEFS, ERA_DEFS, resourceName } from './defs';
+import { ROAD_TEXTURE_KEY, buildingTextureKey } from './assets';
+import {
+  ROAD_HOTKEY,
+  buildingsOnTab,
+  eraTabLabel,
+  paletteSlotCount,
+  roadSlotIndex,
+  wrapTab,
+  type BuildPick,
+} from './buildingSelection';
+import { BUILDING_DEFS, ERA_DEFS, ROADS_CONFIG, resourceName } from './defs';
 import {
   computeSlotRects,
   computeTabRects,
@@ -42,6 +50,11 @@ const HOTKEY_DIM = UI_COLOR.textDim;
 const TAB_FONT_SIZE = 12;
 
 const HOTKEY_LABELS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+/** 格子列的標籤：十個建築快捷鍵 ＋ 固定排在最後的道路格。 */
+const SLOT_LABELS = [...HOTKEY_LABELS, ROAD_HOTKEY];
+/** 一頁最多幾格。hud.ts 的下列高度與 BuildController 的 HUD 死區都由它推導，
+ *  兩邊看的必須是同一個數字，否則死區會與實際列高錯開。 */
+export const PALETTE_SLOT_COUNT = SLOT_LABELS.length;
 /** 縮圖在格子內留的邊，讓數字有地方站、格子邊框看得出來。 */
 const THUMB_INSET = 4;
 
@@ -54,7 +67,7 @@ export class BuildingPalette {
   private rects: SlotRect[] = [];
   private tabRects: TabRect[] = [];
   private tab = 0;
-  private selectedId: string | null = null;
+  private selected: BuildPick | null = null;
   private lastWidth = 0;
   private lastBarY = 0;
   /** 上一次通報給 onHover 的建築 id，用來擋掉滑鼠在同一格內移動時的重複通報。 */
@@ -65,7 +78,7 @@ export class BuildingPalette {
     private readonly scene: Phaser.Scene,
     private readonly state: GameState,
     private readonly depth: number,
-    private readonly onPick: (def: BuildingDef) => void,
+    private readonly onPick: (pick: BuildPick) => void,
     /** 切換頁籤（點頁籤）時回呼，讓 BuildController 的數字鍵與選單看同一個 tab。 */
     private readonly onTabChange: (tab: number) => void = () => {},
     /** 滑鼠移進/移出格子；def 為 null 代表離開（呼叫端收起資訊面板）。 */
@@ -86,12 +99,12 @@ export class BuildingPalette {
 
     // 格子數固定為按鍵數上限，切頁籤只換內容不重建物件——重建 Image 會讓 Phaser 每次切換
     // 都重新上傳貼圖，且舊物件若忘了 destroy 會靜靜累積。
-    for (let i = 0; i < HOTKEY_LABELS.length; i++) {
+    for (const label of SLOT_LABELS) {
       const thumb = this.scene.add.image(0, 0, buildingTextureKey(BUILDING_DEFS[0].id)).setOrigin(0.5, 0.5);
       this.register(thumb);
       this.thumbs.push(thumb);
 
-      const hotkey = this.scene.add.text(0, 0, HOTKEY_LABELS[i], uiTextStyle(11, HOTKEY_COLOR));
+      const hotkey = this.scene.add.text(0, 0, label, uiTextStyle(11, HOTKEY_COLOR));
       this.register(hotkey);
       this.hotkeys.push(hotkey);
     }
@@ -123,8 +136,8 @@ export class BuildingPalette {
     this.redraw();
   }
 
-  setSelected(def: BuildingDef | null): void {
-    this.selectedId = def?.id ?? null;
+  setSelected(pick: BuildPick | null): void {
+    this.selected = pick;
     this.redraw();
   }
 
@@ -150,6 +163,10 @@ export class BuildingPalette {
     }
     const index = slotAt(this.rects, x, y);
     if (index === -1) return false;
+    if (index === this.roadIndex()) {
+      this.onPick('road');
+      return true;
+    }
     const def = this.currentBuildings()[index];
     if (def === undefined) return true; // 空格子：吃掉點擊但不做事
     // 未解鎖的建築照樣把 def 交出去：由 BuildController 統一擋下並顯示「需人口 N」，
@@ -158,20 +175,25 @@ export class BuildingPalette {
     return true;
   }
 
-  /** 各時代的建築數不同，格子邊長仍以按鍵數上限計算——切頁籤時格子不該忽大忽小。 */
+  /** 各時代的建築數不同，格子邊長仍以格數上限計算——切頁籤時格子不該忽大忽小。 */
   private relayoutSlots(): void {
-    const count = Math.min(this.currentBuildings().length, HOTKEY_LABELS.length);
     this.rects = computeSlotRects(
       this.lastWidth,
       this.lastBarY,
-      count,
-      fitSlotSize(this.lastWidth, HOTKEY_LABELS.length),
+      paletteSlotCount(BUILDING_DEFS, ERA_DEFS, this.tab),
+      fitSlotSize(this.lastWidth, PALETTE_SLOT_COUNT),
     );
+  }
+
+  private roadIndex(): number {
+    return roadSlotIndex(BUILDING_DEFS, ERA_DEFS, this.tab);
   }
 
   private handleHover(x: number, y: number): void {
     const index = slotAt(this.rects, x, y);
-    const def = index === -1 ? undefined : this.currentBuildings()[index];
+    // 道路格沒有建築資訊卡（成本已寫在說明列），一律當成離開處理。
+    const def =
+      index === -1 || index === this.roadIndex() ? undefined : this.currentBuildings()[index];
     const id = def?.id ?? null;
     if (id === this.hoveredId) return;
     this.hoveredId = id;
@@ -209,9 +231,11 @@ export class BuildingPalette {
       label.setPosition(rect.x + rect.width / 2, rect.y + rect.height / 2);
     }
 
+    const roadIndex = this.roadIndex();
     for (const [index, thumb] of this.thumbs.entries()) {
       const rect = this.rects[index];
-      const def = rect === undefined ? undefined : defs[index];
+      // 道路格用 null 標記（不是任何 BuildingDef），建築格查不到 def 就是空格子。
+      const def = rect === undefined ? undefined : index === roadIndex ? null : defs[index];
       const hotkey = this.hotkeys[index];
 
       if (def === undefined) {
@@ -222,9 +246,10 @@ export class BuildingPalette {
         continue;
       }
 
-      const affordable = this.canAfford(def);
-      const unlocked = isBuildingUnlocked(def, population);
-      const selected = def.id === this.selectedId;
+      // 道路不屬於任何時代，永遠可選——它是基礎建設而非時代內容，鎖著只會讓開局無路可鋪。
+      const affordable = def === null ? this.canAffordRoad() : this.canAfford(def);
+      const unlocked = def === null ? true : isBuildingUnlocked(def, population);
+      const selected = this.isSelected(def === null ? 'road' : def);
       drawFramedRect(this.frames, rect.x, rect.y, rect.size, rect.size, {
         fill: unlocked ? SLOT_BG : UI_COLOR.surfaceDisabled,
         fillAlpha: SLOT_BG_ALPHA,
@@ -233,7 +258,7 @@ export class BuildingPalette {
         edgeWidth: selected ? UI_FRAME.selectedEdgeWidth : UI_FRAME.defaultEdgeWidth,
       });
 
-      const key = buildingTextureKey(def.id);
+      const key = def === null ? ROAD_TEXTURE_KEY : buildingTextureKey(def.id);
       thumb.setVisible(true);
       if (this.scene.textures.exists(key)) {
         thumb.setTexture(key);
@@ -249,6 +274,9 @@ export class BuildingPalette {
       }
 
       hotkey.setVisible(true);
+      // 標籤在 redraw 時才寫入：道路格的位置隨該頁建築數浮動，建立時綁死的位置標籤
+      // 會讓道路格頂著隔壁建築的數字（實測顯示「7」而非「R」）。
+      hotkey.setText(def === null ? ROAD_HOTKEY : HOTKEY_LABELS[index]);
       hotkey.setColor(affordable && unlocked ? HOTKEY_COLOR : HOTKEY_DIM);
       hotkey.setPosition(rect.x + 3, rect.y + 2);
       hotkey.setDepth(this.depth + 2);
@@ -256,14 +284,35 @@ export class BuildingPalette {
   }
 
   private canAfford(def: BuildingDef): boolean {
-    return Object.entries(def.cost).every(
+    return this.canAffordCost(def.cost);
+  }
+
+  private canAffordRoad(): boolean {
+    return this.canAffordCost(ROADS_CONFIG.cost);
+  }
+
+  private canAffordCost(cost: Readonly<Record<string, number>>): boolean {
+    return Object.entries(cost).every(
       ([resource, amount]) => getResource(this.state, resource) >= amount,
     );
   }
 
+  /** 道路與建築不共用 id 空間，比對得先分流；兩者互斥，選了一個就不會同時選中另一個。 */
+  private isSelected(pick: BuildPick): boolean {
+    const current = this.selected;
+    if (current === null) return false;
+    if (current === 'road' || pick === 'road') return current === pick;
+    return current.id === pick.id;
+  }
+
   /** 給說明列用：把成本排成「木材 30　石材 10」，不足的項目標出來由呼叫端決定怎麼呈現。 */
   static formatCost(def: BuildingDef, state: GameState): string {
-    const entries = Object.entries(def.cost);
+    return BuildingPalette.formatCostEntries(def.cost, state);
+  }
+
+  /** 同上，但吃任意成本表——道路的成本來自 ROADS_CONFIG 而不是 BuildingDef。 */
+  static formatCostEntries(cost: Readonly<Record<string, number>>, state: GameState): string {
+    const entries = Object.entries(cost);
     if (entries.length === 0) return '免費';
     return entries
       .map(([id, amount]) => {

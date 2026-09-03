@@ -3,7 +3,9 @@
 import { addResource, getResource, type GameState } from '../world/state';
 import { footprintTiles, isAreaFree } from '../world/occupancy';
 import { canBuildAt } from '../world/buildable';
-import type { BuildingDef, EconomyConfig, ResourceDef } from '../../data/types';
+import { hasRoad, placeRoad, removeRoad } from '../world/roads';
+import { isBuildable, terrainAt } from '../world/terrain';
+import type { BuildingDef, EconomyConfig, ResourceDef, RoadsConfig } from '../../data/types';
 import { isBuildingUnlocked } from '../../data/eras';
 
 export interface AddResourceCommand {
@@ -162,6 +164,7 @@ export function applyCommand(
   command: Command,
   defs: BuildingDef[] = [],
   trade?: TradeContext,
+  roads?: RoadsConfig,
 ): void {
   switch (command.type) {
     case 'addResource':
@@ -230,9 +233,39 @@ export function applyCommand(
       state.buildings.splice(index, 1);
       break;
     }
-    case 'placeRoad':
+    case 'placeRoad': {
+      if (roads === undefined) break; // 未注入道路設定 → 靜默跳過
+
+      // 非整數或超出世界邊界 → 靜默跳過。
+      if (
+        !Number.isInteger(command.x) ||
+        !Number.isInteger(command.y) ||
+        command.x < 0 ||
+        command.y < 0 ||
+        command.x >= state.worldSize ||
+        command.y >= state.worldSize
+      ) break;
+      // 水面、山地等不可建地形 → 靜默跳過。
+      if (!isBuildable(terrainAt(state, command.x, command.y))) break;
+      // 既有建築的任何 footprint 佔格 → 靜默跳過。
+      if (!isAreaFree(state, [{ x: command.x, y: command.y }], defs)) break;
+      // 已有道路 → 靜默跳過，避免重複扣費。
+      if (hasRoad(state, command.x, command.y)) break;
+
+      const costEntries = Object.entries(roads.cost);
+      // 任一成本不足 → 整筆跳過，不部分扣款。
+      if (!costEntries.every(([resource, amount]) => getResource(state, resource) >= amount)) break;
+
+      for (const [resource, amount] of costEntries) {
+        addResource(state, resource, -amount);
+      }
+      placeRoad(state, command.x, command.y);
+      break;
+    }
     case 'removeRoad':
-      // M6-W2 契約：實作由指令派工填入（鋪路檢查與扣費、拆路）。
+      if (roads === undefined) break; // 未注入道路設定 → 靜默跳過
+      // 拆路免費且不退費，避免鋪設／拆除循環刷資源。
+      if (!removeRoad(state, command.x, command.y)) break;
       break;
     default: {
       // 窮盡守衛：validateCommand 已在 enqueue/tick/存檔還原時擋下未知 type，

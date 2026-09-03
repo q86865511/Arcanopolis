@@ -1,11 +1,13 @@
 // scripts/screenshot.mjs
 // 一鍵對遊戲畫面截圖的驗證工具：啟動 vite dev server → chromium headless 截圖 → 關閉 server。
 // 用法：node scripts/screenshot.mjs [--port 5199] [--wait 5000] [--out screenshots/latest.png]
-//                                   [--viewport 1280x720] [--center gx,gy] [--hover x,y] [--click x,y] [--query new=1&tick=480] [--storage file.json]
+//                                   [--viewport 1280x720] [--center gx,gy] [--hover x,y] [--click x,y[;x,y...]] [--query new=1&tick=480] [--storage file.json]
 // 5173 可能被其他 dev server 佔用，預設一律用 5199。
 // --viewport 用於驗證視窗自適應（Scale.RESIZE）：同一畫面換不同視窗尺寸各截一張比對。
 // --hover 是畫面座標（非格座標），截圖前把滑鼠移過去：用來驗懸停才出現的 UI
 // --click 同為畫面座標，在 --hover 之前先左鍵點一下：用來驗點擊後才改變的 UI（如切換建築選單頁籤）
+//         可用分號串多點（例 520,668;640,300;672,316），依序點擊、每點之間等 150ms：
+//         用來驗「先選工具再對世界操作」這種要兩步以上的互動
 // --query 原樣附在 URL 後（不含問號）：new=1 開新局不讀存檔、tick=N 開局先快轉 N tick（見 CityScene）
 // --storage 讀一個 JSON 物件（key → value 字串），在頁面載入前塞進 localStorage：用來驗「讀到某種存檔」的路徑（如舊版存檔文案）
 // （建築選單的資訊卡）；Phaser 的 POINTER_MOVE 要真的有一次移動事件才會觸發。
@@ -52,6 +54,18 @@ function parseHover(text) {
   return { x: Number(match[1]), y: Number(match[2]) };
 }
 
+/** --click 的一或多個畫面座標，分號分隔；依序點擊。 */
+function parseClicks(text) {
+  if (text === undefined) return [];
+  return text.split(';').map((part) => {
+    const match = /^(\d+),(\d+)$/.exec(part.trim());
+    if (match === null) {
+      throw new Error(`screenshot: --click 格式須為 <x>,<y>，多點以分號分隔（例 520,668;640,300），收到 ${text}`);
+    }
+    return { x: Number(match[1]), y: Number(match[2]) };
+  });
+}
+
 function parseArgs(argv) {
   const values = new Map();
   const supported = new Set(['--port', '--wait', '--out', '--viewport', '--center', '--hover', '--click', '--query', '--storage']);
@@ -82,11 +96,11 @@ function parseArgs(argv) {
   const viewport = parseViewport(values.get('--viewport') ?? '1280x720');
   const center = parseCenter(values.get('--center'));
   const hover = parseHover(values.get('--hover'));
-  const click = parseHover(values.get('--click'));
+  const clicks = parseClicks(values.get('--click'));
   const query = values.get('--query') ?? '';
   const storage = values.get('--storage');
 
-  return { port, wait, out, viewport, center, hover, click, query, storage };
+  return { port, wait, out, viewport, center, hover, clicks, query, storage };
 }
 
 /** 啟動 vite dev server（子程序），stdout 出現 "Local:"（server ready）才 resolve，逾時或提早結束則 reject */
@@ -164,7 +178,7 @@ function killProcessTree(child) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const { port, wait, out, viewport, center, hover, click, query, storage } = parseArgs(argv);
+  const { port, wait, out, viewport, center, hover, clicks, query, storage } = parseArgs(argv);
   const outPath = resolve(projectRoot, out);
   mkdirSync(dirname(outPath), { recursive: true });
 
@@ -210,10 +224,12 @@ export async function main(argv = process.argv.slice(2)) {
       await page.waitForTimeout(2000);
     }
 
-    if (click !== undefined) {
+    for (const click of clicks) {
       await page.mouse.click(click.x, click.y);
-      await page.waitForTimeout(200);
+      // 每點之間留一拍：多步互動的下一步常要等上一步改完狀態（選工具 → 預覽 → 下指令）。
+      await page.waitForTimeout(150);
     }
+    if (clicks.length > 0) await page.waitForTimeout(200);
 
     if (hover !== undefined) {
       // 先移到別處再移到目標點：Phaser 只在座標真的變動時派發 POINTER_MOVE，

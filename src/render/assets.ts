@@ -84,6 +84,9 @@ export const GAME_TEXTURES: readonly TextureEntry[] = [
   { key: 'villager-02', url: new URL('../../assets/game/villager-02.png', import.meta.url).href },
 ];
 
+/** 道路路面：地形烘焙時疊在原地形之上，選單的道路格也用同一張當縮圖。 */
+export const ROAD_TEXTURE_KEY = 'tile-dirt-01';
+
 /** 居民 sprite key：依 citizen id 字元碼和決定性挑選（同一 id 永遠同一張圖，重繪也一致）。 */
 export const VILLAGER_TEXTURES = ['villager-01', 'villager-02'] as const;
 

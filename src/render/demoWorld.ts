@@ -5,7 +5,13 @@ import { createDefaultSystems } from '../core/sim/systemStack';
 import { canBuildAt } from '../core/world/buildable';
 import { applyStartingResources } from '../core/world/scenario';
 import { createInitialState, type Building, type Citizen, type GameState } from '../core/world/state';
-import { BUILDING_DEFS, ECONOMY_CONFIG, RESOURCE_DEFS, TERRAIN_ECONOMY } from './defs';
+import {
+  BUILDING_DEFS,
+  ECONOMY_CONFIG,
+  RESOURCE_DEFS,
+  ROADS_CONFIG,
+  TERRAIN_ECONOMY,
+} from './defs';
 
 const DEMO_SEED = 1;
 
@@ -102,6 +108,7 @@ export function createSimulationFor(state: GameState): Simulation {
     }),
     BUILDING_DEFS,
     { resourceDefs: RESOURCE_DEFS, economy: ECONOMY_CONFIG },
+    ROADS_CONFIG,
   );
 }
 
