@@ -21,6 +21,7 @@ import type { GameState } from '../../src/core/world/state';
 import { applyCommand, type Command } from '../../src/core/sim/commands';
 import { Simulation } from '../../src/core/sim/simulation';
 import { getResource } from '../../src/core/world/state';
+import { placeRoad } from '../../src/core/world/roads';
 
 // ── R1：loader 驗證 ─────────────────────────────────────────────────────────
 
@@ -294,6 +295,24 @@ describe('R2：canBuildAt（src/core/world/buildable.ts）', () => {
     const farm = def({ id: 'farm', terrain: { on: ['grass'] } });
     const defs = [farm];
     expect(canBuildAt(state, farm, 5, 5, defs)).toBe(false);
+  });
+
+  it('1×1 建築目標格已有道路 → false', () => {
+    const state = makeState();
+    setTerrain(state, 5, 5, 'grass');
+    expect(placeRoad(state, 5, 5)).toBe(true);
+
+    expect(canBuildAt(state, def({ id: 'house' }), 5, 5, [])).toBe(false);
+  });
+
+  it('2×2 建築 footprint 任一格已有道路 → false', () => {
+    const state = makeState();
+    for (const [x, y] of [[5, 5], [6, 5], [5, 6], [6, 6]] as const) {
+      setTerrain(state, x, y, 'grass');
+    }
+    expect(placeRoad(state, 6, 6)).toBe(true);
+
+    expect(canBuildAt(state, def({ id: 'workshop', size: { w: 2, h: 2 } }), 5, 5, [])).toBe(false);
   });
 
   it('純函數：不修改 state，重複呼叫結果相同', () => {

@@ -5,6 +5,7 @@ import buildingsJson from '../../data/buildings.json';
 import economyJson from '../../data/economy.json';
 import populationJson from '../../data/population.json';
 import resourcesJson from '../../data/resources.json';
+import roadsJson from '../../data/roads.json';
 import terrainEconomyJson from '../../data/terrain-economy.json';
 import { Simulation } from '../core/sim/simulation';
 import type { System } from '../core/sim/system';
@@ -20,7 +21,14 @@ import {
   type GameState,
 } from '../core/world/state';
 import type { PopulationConfig } from '../data/types';
-import { parseBuildingDefs, parseEconomyConfig, parsePopulationConfig, parseResourceDefs, parseTerrainEconomy } from '../data/loader';
+import {
+  parseBuildingDefs,
+  parseEconomyConfig,
+  parsePopulationConfig,
+  parseResourceDefs,
+  parseRoadsConfig,
+  parseTerrainEconomy,
+} from '../data/loader';
 
 declare const process: {
   argv: string[];
@@ -69,6 +77,7 @@ export interface FastForwardResult {
 const resourceDefs = parseResourceDefs(resourcesJson);
 const resourceIds = new Set(resourceDefs.map((definition) => definition.id));
 const buildingDefs = parseBuildingDefs(buildingsJson, resourceIds);
+const roadsConfig = parseRoadsConfig(roadsJson);
 const terrainEconomy = parseTerrainEconomy(terrainEconomyJson);
 
 function parseInteger(parameter: string, value: string | undefined): number {
@@ -299,7 +308,7 @@ export function runFastForward(options: FastForwardOptions): FastForwardResult {
     systems = [createProductionSystem(simulationBuildingDefs, terrainEconomy)];
   }
 
-  const simulation = new Simulation(state, systems, simulationBuildingDefs);
+  const simulation = new Simulation(state, systems, simulationBuildingDefs, undefined, roadsConfig);
   const rows = [
     ['tick', 'totalDay', 'population', ...resourceDefs.map((definition) => definition.id)].join(','),
     csvRow(state),

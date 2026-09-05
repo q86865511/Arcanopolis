@@ -5,15 +5,22 @@
 // 預覽的顏色，不是權威判定——真正的守門在 core/sim/commands.ts 的 applyCommand。
 
 import Phaser from 'phaser';
-import { footprintTiles } from '../core/world/occupancy';
+import { footprintTiles, isAreaFree } from '../core/world/occupancy';
 import type { Simulation } from '../core/sim/simulation';
 import { getResource, type Building, type GameState } from '../core/world/state';
 import { canBuildAt } from '../core/world/buildable';
+import { hasRoad } from '../core/world/roads';
+import { isBuildable, terrainAt } from '../core/world/terrain';
 import type { BuildingDef } from '../data/types';
 import { isBuildingUnlocked } from '../data/eras';
-import { buildingsOnTab, lockedBuildingNotice, wrapTab } from './buildingSelection';
+import {
+  buildingsOnTab,
+  lockedBuildingNotice,
+  wrapTab,
+  type BuildPick,
+} from './buildingSelection';
 import { demolitionWarning } from './demolition';
-import { BUILDING_DEFS, ERA_DEFS, buildingSize } from './defs';
+import { BUILDING_DEFS, ERA_DEFS, ROADS_CONFIG, buildingSize } from './defs';
 import { TOP_BAR_H, bottomBarHeight } from './hud';
 import { TILE_H, TILE_W, tileCenter, type GridPoint } from './iso';
 import { UI_COLOR } from './ui/theme';
@@ -49,7 +56,8 @@ const MOUSE_BUTTON_RIGHT = 2;
 
 export class BuildController {
   private preview!: Phaser.GameObjects.Graphics;
-  private selected: BuildingDef | null = null;
+  /** 目前選中的工具：一棟建築或道路（'road'）。兩者互斥，見 buildingSelection 的 BuildPick。 */
+  private selected: BuildPick | null = null;
   /** 目前的時代頁籤索引（ERA_DEFS 的索引）。 */
   private tab = 0;
   /** 是否正顯示「需人口 N」的提示：下一次成功選取時要把它收掉，否則會蓋著說明列不走。 */
@@ -65,16 +73,16 @@ export class BuildController {
     private readonly scene: Phaser.Scene,
     private readonly state: GameState,
     private readonly sim: Simulation,
-    private readonly onSelectionChange: (def: BuildingDef | null, tab: number) => void,
+    private readonly onSelectionChange: (pick: BuildPick | null, tab: number) => void,
     /** HUD 先吃點擊：回 true 代表這一下已被選單格子處理，不再當成世界上的放置/拆除。 */
     private readonly onHudPointer: (x: number, y: number) => boolean = () => false,
     /** 顯示/清除下列的警告訊息；null 代表回到平常的說明文字。 */
     private readonly onNotice: (message: string | null) => void = () => {},
   ) {}
 
-  /** 供 HUD 的建築選單格子呼叫（點格子＝選建築）。 */
-  selectDef(def: BuildingDef | null): void {
-    this.select(def);
+  /** 供 HUD 的選單格子呼叫（點建築格＝選建築，點道路格＝進道路模式）。 */
+  selectDef(pick: BuildPick | null): void {
+    this.select(pick);
   }
 
   /** 供 HUD 的時代頁籤呼叫（點頁籤＝切分類）。 */
@@ -98,6 +106,8 @@ export class BuildController {
           if (def !== undefined) this.select(def);
         });
       });
+      // R 不佔數字鍵：道路格在每個頁籤都存在，跟著頁籤換位置的話快捷鍵也會跟著漂。
+      keyboard.on('keydown-R', () => this.select('road'));
       keyboard.on('keydown-OPEN_BRACKET', () => this.changeTab(-1));
       keyboard.on('keydown-CLOSED_BRACKET', () => this.changeTab(1));
       keyboard.on('keydown-ESC', () => this.select(null));
@@ -140,24 +150,31 @@ export class BuildController {
 
   /** 每幀呼叫。hover 格由 activePointer 現算——攝影機平移／縮放時滑鼠沒動，格子也會變。 */
   update(): void {
-    const def = this.selected;
+    const pick = this.selected;
     const pointer = this.scene.input.activePointer;
-    const tile = def === null || this.isOverHud(pointer) ? null : this.pointerTile(pointer);
-    const placeable = def !== null && tile !== null && this.canPlace(def, tile.gx, tile.gy);
+    const tile = pick === null || this.isOverHud(pointer) ? null : this.pointerTile(pointer);
+    const placeable = pick !== null && tile !== null && this.canPlacePick(pick, tile.gx, tile.gy);
 
     const signature =
-      def === null || tile === null ? 'none' : `${def.id}|${tile.gx}|${tile.gy}|${placeable}`;
+      pick === null || tile === null
+        ? 'none'
+        : `${pick === 'road' ? 'road' : pick.id}|${tile.gx}|${tile.gy}|${placeable}`;
     if (signature === this.previewSignature) {
       return;
     }
     this.previewSignature = signature;
 
     this.preview.clear();
-    if (def === null || tile === null) {
+    if (pick === null || tile === null) {
       return;
     }
     const color = placeable ? PREVIEW_OK_COLOR : PREVIEW_BLOCKED_COLOR;
-    for (const t of footprintTiles(tile.gx, tile.gy, def.size.w, def.size.h)) {
+    // 道路一次一格（本波不做拖曳連鋪），建築照 footprint 畫。
+    const tiles =
+      pick === 'road'
+        ? [{ x: tile.gx, y: tile.gy }]
+        : footprintTiles(tile.gx, tile.gy, pick.size.w, pick.size.h);
+    for (const t of tiles) {
       this.drawTileDiamond(t.x, t.y, color);
     }
   }
@@ -166,20 +183,25 @@ export class BuildController {
    * 選取的單一閘門：點格子與按數字鍵都走這裡，未達人口門檻的建築一律擋下並提示。
    * 擋在這裡而不是各自在選單與鍵盤路徑上判斷，提示文案與清除時機才只有一份。
    */
-  private select(def: BuildingDef | null): void {
-    if (def !== null && !isBuildingUnlocked(def, this.state.citizens.length)) {
+  private select(pick: BuildPick | null): void {
+    // 道路不受人口門檻限制：它是基礎建設而非時代內容，開局就該鋪得起來。
+    if (
+      pick !== null &&
+      pick !== 'road' &&
+      !isBuildingUnlocked(pick, this.state.citizens.length)
+    ) {
       this.lockNoticeShown = true;
-      this.onNotice(lockedBuildingNotice(def));
+      this.onNotice(lockedBuildingNotice(pick));
       return;
     }
     this.clearPendingRemove();
     this.clearLockNotice();
-    if (def === this.selected) {
+    if (pick === this.selected) {
       return;
     }
-    this.selected = def;
+    this.selected = pick;
     this.previewSignature = '';
-    this.onSelectionChange(def, this.tab);
+    this.onSelectionChange(pick, this.tab);
   }
 
   /** 切頁籤後一律取消選取：舊頁籤選中的建築留著會與畫面上的按鍵提示對不起來。 */
@@ -204,10 +226,16 @@ export class BuildController {
   }
 
   private requestPlace(tile: GridPoint): void {
-    const def = this.selected;
-    if (def === null) {
+    const pick = this.selected;
+    if (pick === null) {
       return;
     }
+    if (pick === 'road') {
+      if (!this.canPlaceRoad(tile.gx, tile.gy)) return;
+      this.sim.enqueue({ type: 'placeRoad', x: tile.gx, y: tile.gy });
+      return;
+    }
+    const def = pick;
     // 明顯放不了的（超出地圖、重疊、錢不夠）就不送指令：core 本來就會靜默跳過，
     // 但少送一筆指令，存檔裡的 pendingCommands 也乾淨些。
     if (!this.canPlace(def, tile.gx, tile.gy)) {
@@ -217,6 +245,12 @@ export class BuildController {
   }
 
   private requestRemove(tile: GridPoint): void {
+    // 道路模式下右鍵只拆路：拆一格路是可逆且免費的，不套建築的二次確認。
+    if (this.selected === 'road') {
+      if (!hasRoad(this.state, tile.gx, tile.gy)) return;
+      this.sim.enqueue({ type: 'removeRoad', x: tile.gx, y: tile.gy });
+      return;
+    }
     const target = this.buildingAt(tile.gx, tile.gy);
     if (target === undefined) {
       // 點空地也要清掉待確認狀態：否則玩家點開別處再回來按一次右鍵就會直接拆掉，
@@ -269,6 +303,24 @@ export class BuildController {
     // 高度感知拾取：階地把頂面畫在平面投影之上，平面版 hitTile 會選到「看起來的格子」
     // 後方的格。quarry/mine 要蓋在 rock 上而 rock 分布在 1/2 階，這裡不修會放錯位。
     return pickElevatedTile(world.x, world.y, (gx, gy) => levelAt(this.state, gx, gy));
+  }
+
+  private canPlacePick(pick: BuildPick, gx: number, gy: number): boolean {
+    return pick === 'road' ? this.canPlaceRoad(gx, gy) : this.canPlace(pick, gx, gy);
+  }
+
+  /** 與 core applyCommand 的 placeRoad 判準對齊（世界內、可建地形、無建築、無既有路、付得起）；
+   *  同樣只決定預覽顏色，權威判定仍在 core。 */
+  private canPlaceRoad(gx: number, gy: number): boolean {
+    if (gx < 0 || gy < 0 || gx >= this.state.worldSize || gy >= this.state.worldSize) {
+      return false;
+    }
+    if (!isBuildable(terrainAt(this.state, gx, gy))) return false;
+    if (!isAreaFree(this.state, [{ x: gx, y: gy }], BUILDING_DEFS)) return false;
+    if (hasRoad(this.state, gx, gy)) return false;
+    return Object.entries(ROADS_CONFIG.cost).every(
+      ([resource, amount]) => getResource(this.state, resource) >= amount,
+    );
   }
 
   private canPlace(def: BuildingDef, gx: number, gy: number): boolean {

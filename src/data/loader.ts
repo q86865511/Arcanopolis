@@ -52,7 +52,7 @@ const BUILDING_SIZE_KEYS = ['w', 'h'] as const;
 const BUILDING_TERRAIN_KEYS = ['on', 'near', 'consumes'] as const;
 const TERRAIN_ECONOMY_KEYS = ['forestWoodCapacity', 'rockStoneCapacity', 'forestRegrowDays'] as const;
 const ECONOMY_CONFIG_KEYS = ['taxPerEmployedCitizenPerDay', 'marketBuyMarkup'] as const;
-const ROADS_CONFIG_KEYS = ['nonRoadStepCost', 'speedMultiplierOnRoad'] as const;
+const ROADS_CONFIG_KEYS = ['nonRoadStepCost', 'speedMultiplierOnRoad', 'cost'] as const;
 const POPULATION_CONFIG_KEYS = [
   'foodPerCitizenPerDay',
   'growthPerDay',
@@ -492,7 +492,7 @@ export function parseRoadsConfig(input: unknown): RoadsConfig {
   }
   rejectUnknownKeys(input, ROADS_CONFIG_KEYS, 'parseRoadsConfig');
 
-  const { nonRoadStepCost, speedMultiplierOnRoad } = input;
+  const { nonRoadStepCost, speedMultiplierOnRoad, cost } = input;
   if (typeof nonRoadStepCost !== 'number' || !Number.isInteger(nonRoadStepCost) || nonRoadStepCost < 1) {
     throw new Error(
       `parseRoadsConfig: nonRoadStepCost 必須是至少 1 的整數，收到 ${JSON.stringify(nonRoadStepCost)}`,
@@ -511,7 +511,18 @@ export function parseRoadsConfig(input: unknown): RoadsConfig {
     );
   }
 
-  return { nonRoadStepCost, speedMultiplierOnRoad };
+  if (!isPlainObject(cost)) {
+    throw new Error(`parseRoadsConfig: cost 必須是物件，收到 ${JSON.stringify(cost)}`);
+  }
+  const validCost: Record<string, number> = {};
+  for (const [resource, amount] of Object.entries(cost)) {
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
+      throw new Error(`parseRoadsConfig: cost["${resource}"] 必須是有限非負數，收到 ${JSON.stringify(amount)}`);
+    }
+    validCost[resource] = amount;
+  }
+  // 資源 id 是否存在由 tests/data/roads-config.test.ts 對 resources.json 交叉鎖定，loader 不吃 resourceIds 以維持簽章。
+  return { nonRoadStepCost, speedMultiplierOnRoad, cost: validCost };
 }
 
 export function parseTerrainEconomy(input: unknown): TerrainEconomy {

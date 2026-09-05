@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { terrainAt, type TerrainType } from '../core/world/terrain';
 import type { GameState } from '../core/world/state';
+import { hasRoad } from '../core/world/roads';
+import { ROAD_TEXTURE_KEY } from './assets';
 import { decorPlacementsFor } from './decor';
 import { EDGE_OFFSETS, terrainTextureKeyFor } from './terrainTiles';
 import { ELEVATION_STEP, MAX_ELEVATION_LEVEL, levelAt } from './elevation';
@@ -59,6 +61,10 @@ export interface TerrainRenderMetrics {
  * 每個 chunk 只建立一個場景物件。烘焙時建立未加入 display list 的 Image 陣列，再以
  * RenderTexture.draw(images) 一次送出；逐格 draw 在 spike 中慢了約四個數量級。
  */
+/** 路面壓暗：tile-dirt-01 是定調前的亮橘紅素材，乘上暗棕才不會從暗橄欖地表跳出來。
+ *  正式解法是依 art-bible 重生一張路面 tile（已登記美術債），屆時把這裡改回 0xffffff。 */
+const ROAD_TINT = 0x8c7a5e;
+
 export class TerrainRenderer {
   private readonly chunks = new Map<string, ChunkBounds>();
   private readonly cache = new Map<string, ChunkEntry>();
@@ -219,6 +225,21 @@ export class TerrainRenderer {
 
         const image = new Phaser.GameObjects.Image(this.scene, drawX, topY, textureKey).setOrigin(0, 0);
         images.push(image);
+
+        // 道路路面疊在原地形之上（M6-W2）：不換地形選圖，因為選圖要看鄰格過渡，
+        // 讓道路參與過渡等於在草地與道路之間再長出一套海岸線式的邊圖。
+        // 鋪了路的格子不長裝飾物——路面上冒出花草會讓「這裡被鋪過」這件事讀不出來。
+        if (hasRoad(this.state, gx, gy)) {
+          if (!this.scene.textures.exists(ROAD_TEXTURE_KEY)) {
+            throw new Error(`TerrainRenderer: texture key "${ROAD_TEXTURE_KEY}" 尚未載入`);
+          }
+          images.push(
+            new Phaser.GameObjects.Image(this.scene, drawX, topY, ROAD_TEXTURE_KEY)
+              .setOrigin(0, 0)
+              .setTint(ROAD_TINT),
+          );
+          continue;
+        }
 
         // 裝飾物錨在格中心（vertex 再往下半格），底邊中央對齊：地面小物的「立足點」
         // 應是格子視覺上的中央，不是頂端菱形角。隨格子一起畫，chunk 接縫由重複繪製自動覆蓋。

@@ -89,6 +89,8 @@ export interface RoadsConfig {
   nonRoadStepCost: number;
   /** 居民位於道路格時的速度倍率 */
   speedMultiplierOnRoad: number;
+  /** 每格道路的鋪設成本：資源 id → 數量；拆除不退費 */
+  cost: Record<string, number>;
 }
 
 /** 地形資源與森林再生常數，對應 data\terrain-economy.json。 */

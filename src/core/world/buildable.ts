@@ -2,6 +2,7 @@
 
 import type { BuildingDef } from '../../data/types';
 import { footprintTiles, isAreaFree, type Tile } from './occupancy';
+import { hasRoad } from './roads';
 import type { GameState } from './state';
 import { isBuildable, isWalkable, terrainAt } from './terrain';
 
@@ -43,6 +44,7 @@ export function canBuildAt(
   }
 
   if (!isAreaFree(state, tiles, defs)) return false;
+  if (tiles.some((tile) => hasRoad(state, tile.x, tile.y))) return false;
 
   return !wouldTrapAnyBuilding(state, tiles, defs);
 }

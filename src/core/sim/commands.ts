@@ -3,7 +3,9 @@
 import { addResource, getResource, type GameState } from '../world/state';
 import { footprintTiles, isAreaFree } from '../world/occupancy';
 import { canBuildAt } from '../world/buildable';
-import type { BuildingDef, EconomyConfig, ResourceDef } from '../../data/types';
+import { hasRoad, placeRoad, removeRoad } from '../world/roads';
+import { isBuildable, terrainAt } from '../world/terrain';
+import type { BuildingDef, EconomyConfig, ResourceDef, RoadsConfig } from '../../data/types';
 import { isBuildingUnlocked } from '../../data/eras';
 
 export interface AddResourceCommand {
@@ -34,7 +36,27 @@ export interface TradeCommand {
   amount: number;
 }
 
-export type Command = AddResourceCommand | PlaceBuildingCommand | RemoveBuildingCommand | TradeCommand;
+/** 鋪一格道路（M6-W2）：需在世界內、地形可鋪、無建築佔格、無既有道路，並扣 ROADS_CONFIG.cost；任一不符靜默跳過。 */
+export interface PlaceRoadCommand {
+  type: 'placeRoad';
+  x: number;
+  y: number;
+}
+
+/** 拆一格道路（M6-W2）：無路則靜默跳過；不退費。 */
+export interface RemoveRoadCommand {
+  type: 'removeRoad';
+  x: number;
+  y: number;
+}
+
+export type Command =
+  | AddResourceCommand
+  | PlaceBuildingCommand
+  | RemoveBuildingCommand
+  | TradeCommand
+  | PlaceRoadCommand
+  | RemoveRoadCommand;
 
 /** 交易所需的市場環境：定價來自資源表、加價率來自經濟表。
  *  未注入時 trade 指令一律靜默跳過（比照 placeBuilding 未注入 defs 的處理）。 */
@@ -120,6 +142,15 @@ export function validateCommand(command: Command): void {
         );
       }
       break;
+    case 'placeRoad':
+    case 'removeRoad':
+      if (!Number.isInteger(command.x) || Math.abs(command.x) > MAX_COORDINATE_ABS) {
+        throw new Error(`${command.type}: x 必須是絕對值不超過 ${MAX_COORDINATE_ABS} 的整數，收到 ${JSON.stringify(command.x)}`);
+      }
+      if (!Number.isInteger(command.y) || Math.abs(command.y) > MAX_COORDINATE_ABS) {
+        throw new Error(`${command.type}: y 必須是絕對值不超過 ${MAX_COORDINATE_ABS} 的整數，收到 ${JSON.stringify(command.y)}`);
+      }
+      break;
     default: {
       const unknownType = (command as { type?: unknown }).type;
       throw new Error(`validateCommand: 未知指令 type，收到 ${JSON.stringify(unknownType)}`);
@@ -133,6 +164,7 @@ export function applyCommand(
   command: Command,
   defs: BuildingDef[] = [],
   trade?: TradeContext,
+  roads?: RoadsConfig,
 ): void {
   switch (command.type) {
     case 'addResource':
@@ -201,6 +233,40 @@ export function applyCommand(
       state.buildings.splice(index, 1);
       break;
     }
+    case 'placeRoad': {
+      if (roads === undefined) break; // 未注入道路設定 → 靜默跳過
+
+      // 非整數或超出世界邊界 → 靜默跳過。
+      if (
+        !Number.isInteger(command.x) ||
+        !Number.isInteger(command.y) ||
+        command.x < 0 ||
+        command.y < 0 ||
+        command.x >= state.worldSize ||
+        command.y >= state.worldSize
+      ) break;
+      // 水面、山地等不可建地形 → 靜默跳過。
+      if (!isBuildable(terrainAt(state, command.x, command.y))) break;
+      // 既有建築的任何 footprint 佔格 → 靜默跳過。
+      if (!isAreaFree(state, [{ x: command.x, y: command.y }], defs)) break;
+      // 已有道路 → 靜默跳過，避免重複扣費。
+      if (hasRoad(state, command.x, command.y)) break;
+
+      const costEntries = Object.entries(roads.cost);
+      // 任一成本不足 → 整筆跳過，不部分扣款。
+      if (!costEntries.every(([resource, amount]) => getResource(state, resource) >= amount)) break;
+
+      for (const [resource, amount] of costEntries) {
+        addResource(state, resource, -amount);
+      }
+      placeRoad(state, command.x, command.y);
+      break;
+    }
+    case 'removeRoad':
+      if (roads === undefined) break; // 未注入道路設定 → 靜默跳過
+      // 拆路免費且不退費，避免鋪設／拆除循環刷資源。
+      if (!removeRoad(state, command.x, command.y)) break;
+      break;
     default: {
       // 窮盡守衛：validateCommand 已在 enqueue/tick/存檔還原時擋下未知 type，
       // 但 applyCommand 可能被直接呼叫繞過驗證（見 R8），此處不可靜默放行。

@@ -24,6 +24,7 @@ import {
   buildingDepth,
 } from './placement';
 import { footprintTiles } from '../core/world/occupancy';
+import { parseRoadKey } from '../core/world/roads';
 import type { Simulation } from '../core/sim/simulation';
 import type { Building, Citizen, GameState } from '../core/world/state';
 import { UI_COLOR } from './ui/theme';
@@ -135,6 +136,8 @@ export class CityScene extends Phaser.Scene {
    * 可抓新增、刪除與 type 改變；resource-only 變動不重烘，因為畫面地形沒有改變。
    */
   private terrainOverrideTypes = new Map<string, string>();
+  /** 同上，但道路只有「有／沒有」兩種狀態，存 key 集合即可（見 detectRoadChanges）。 */
+  private roadKeys = new Set<string>();
   private progressBars!: Phaser.GameObjects.Graphics;
   private accumulator = 0;
   private speed: GameSpeed = INITIAL_SPEED;
@@ -183,6 +186,7 @@ export class CityScene extends Phaser.Scene {
     this.knownBuildingIds.clear();
     this.buildingTiles.clear();
     this.terrainOverrideTypes = this.snapshotTerrainOverrideTypes();
+    this.roadKeys = new Set(Object.keys(this.state.roads));
 
     // UI 攝影機要先建立：之後每個「世界」物件建立時都得叫它忽略，否則會被畫第二次
     this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height);
@@ -419,6 +423,12 @@ export class CityScene extends Phaser.Scene {
         this.terrain.invalidateTile(tile.x, tile.y);
         terrainChanges.set(`${tile.x},${tile.y}`, tile);
       }
+      // 道路與地形共用同一條「重烘 chunk ＋ 更新小地圖」的路徑：路面畫在地形烘焙裡，
+      // 小地圖的一格代表色也由有無道路決定，兩者的失效條件因此完全一致。
+      for (const tile of this.detectRoadChanges()) {
+        this.terrain.invalidateTile(tile.x, tile.y);
+        terrainChanges.set(`${tile.x},${tile.y}`, tile);
+      }
       this.accumulator -= SIM_TICK_MS;
       ticks += 1;
     }
@@ -478,6 +488,26 @@ export class CityScene extends Phaser.Scene {
       const y = Number(yText);
       if (Number.isInteger(x) && Number.isInteger(y)) changed.push({ x, y });
     }
+    return changed;
+  }
+
+  /** 比對前後兩份道路 key 集合，回傳這 tick 內新鋪或被拆的格。 */
+  private detectRoadChanges(): Array<{ x: number; y: number }> {
+    const next = new Set(Object.keys(this.state.roads));
+    const changed: Array<{ x: number; y: number }> = [];
+    for (const key of next) {
+      if (!this.roadKeys.has(key)) {
+        const tile = parseRoadKey(key);
+        if (tile !== null) changed.push(tile);
+      }
+    }
+    for (const key of this.roadKeys) {
+      if (!next.has(key)) {
+        const tile = parseRoadKey(key);
+        if (tile !== null) changed.push(tile);
+      }
+    }
+    this.roadKeys = next;
     return changed;
   }
 

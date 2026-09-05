@@ -48,3 +48,34 @@ export function eraTabLabel(era: EraDef, population: number): string {
 export function lockedBuildingNotice(def: BuildingDef): string {
   return `${def.name} 需人口 ${unlockPopulationOf(def)} 才能建造`;
 }
+
+/**
+ * 建造工具目前選中的東西：一棟建築，或道路工具（M6-W2）。
+ * 兩者互斥——道路與建築搶同一組滑鼠語義（左鍵放、右鍵拆），同時成立會讓點擊意圖無法判定。
+ */
+export type BuildPick = BuildingDef | 'road';
+
+/** 道路格的快捷鍵；道路不佔數字鍵，因為每個頁籤都要有它。 */
+export const ROAD_HOTKEY = 'R';
+
+/**
+ * 道路格在格子列中的索引：固定排在該頁建築格之後。
+ * 建築數超過按鍵上限時仍夾在 BUILDINGS_PER_TAB——多出來的建築本來就綁不到數字鍵
+ * （由本檔的回歸鎖守住），道路格不該再被它們往後推出畫面。
+ */
+export function roadSlotIndex(
+  defs: readonly BuildingDef[],
+  eras: readonly EraDef[],
+  tab: number,
+): number {
+  return Math.min(buildingsOnTab(defs, eras, tab).length, BUILDINGS_PER_TAB);
+}
+
+/** 該頁籤實際要畫幾個格子＝建築格 ＋ 一個道路格。 */
+export function paletteSlotCount(
+  defs: readonly BuildingDef[],
+  eras: readonly EraDef[],
+  tab: number,
+): number {
+  return roadSlotIndex(defs, eras, tab) + 1;
+}

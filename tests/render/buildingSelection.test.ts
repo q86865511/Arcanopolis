@@ -5,9 +5,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   BUILDINGS_PER_TAB,
+  ROAD_HOTKEY,
   buildingsOnTab,
   eraTabLabel,
   lockedBuildingNotice,
+  paletteSlotCount,
+  roadSlotIndex,
   tabCount,
   wrapTab,
 } from '../../src/render/buildingSelection';
@@ -123,6 +126,40 @@ describe('實際建築表的可及性（回歸鎖）', () => {
       );
       expect(slot).toBeGreaterThanOrEqual(0);
       expect(slot).toBeLessThan(BUILDINGS_PER_TAB);
+    }
+  });
+});
+
+// 道路格（M6-W2）：固定排在每個頁籤的建築格之後，且不佔數字鍵。
+describe('roadSlotIndex / paletteSlotCount', () => {
+  const defs = [fakeDef('x'), fakeDef('y', 10), fakeDef('z', 20), fakeDef('w', 25)];
+
+  it('道路格排在該頁建築格之後，每頁都有一格', () => {
+    expect(roadSlotIndex(defs, FAKE_ERAS, 0)).toBe(1);
+    expect(roadSlotIndex(defs, FAKE_ERAS, 2)).toBe(2);
+    expect(paletteSlotCount(defs, FAKE_ERAS, 0)).toBe(2);
+  });
+
+  it('該頁沒有建築時道路格仍在第 0 格（開局就鋪得起來）', () => {
+    expect(roadSlotIndex([], FAKE_ERAS, 0)).toBe(0);
+    expect(paletteSlotCount([], FAKE_ERAS, 0)).toBe(1);
+  });
+
+  it('建築數超過按鍵上限時道路格不再往後推，仍留在畫面內', () => {
+    const many = Array.from({ length: BUILDINGS_PER_TAB + 3 }, (_, i) => fakeDef(`m${i}`));
+    expect(roadSlotIndex(many, FAKE_ERAS, 0)).toBe(BUILDINGS_PER_TAB);
+    expect(paletteSlotCount(many, FAKE_ERAS, 0)).toBe(BUILDINGS_PER_TAB + 1);
+  });
+
+  it('道路的快捷鍵不與數字鍵相撞', () => {
+    expect(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']).not.toContain(ROAD_HOTKEY);
+  });
+
+  it('實際資料表下每個頁籤的道路格都在 0..BUILDINGS_PER_TAB 之內', () => {
+    for (let tab = 0; tab < tabCount(ERA_DEFS); tab++) {
+      const index = roadSlotIndex(BUILDING_DEFS, ERA_DEFS, tab);
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(index).toBeLessThanOrEqual(BUILDINGS_PER_TAB);
     }
   });
 });

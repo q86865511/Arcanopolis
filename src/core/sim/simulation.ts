@@ -5,7 +5,7 @@ import { createRng } from './rng';
 import type { System } from './system';
 import { timeFromTick } from './time';
 import type { GameState } from '../world/state';
-import type { BuildingDef } from '../../data/types';
+import type { BuildingDef, RoadsConfig } from '../../data/types';
 
 export class Simulation {
   constructor(
@@ -14,6 +14,8 @@ export class Simulation {
     private readonly defs: BuildingDef[] = [],
     /** 省略時 trade 指令一律靜默跳過——headless 工具與既有測試不需要市場即可建構 Simulation。 */
     private readonly trade?: TradeContext,
+    /** 省略時道路指令一律靜默跳過，保持既有呼叫端語義。 */
+    private readonly roads?: RoadsConfig,
   ) {}
 
   /** 指令不立即生效，於下一次 tick 開頭依 FIFO 套用；非法指令在入口即拒收，保持批次套用原子
@@ -35,7 +37,7 @@ export class Simulation {
     // 先取出整批再清空：system 於本 tick 內 enqueue 的指令留到下一 tick。
     const batch = this.state.pendingCommands.splice(0, this.state.pendingCommands.length);
     for (const command of batch) {
-      applyCommand(this.state, command, this.defs, this.trade);
+      applyCommand(this.state, command, this.defs, this.trade, this.roads);
     }
 
     this.state.tick += 1;

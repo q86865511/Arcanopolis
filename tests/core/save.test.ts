@@ -86,6 +86,16 @@ describe('R3：序列化 round-trip（src/core/save/save.ts）', () => {
     const restored = deserializeGameState(json);
     expect(restored).toEqual(state);
   });
+
+  it('pendingCommands 含 placeRoad／removeRoad 時 serialize/deserialize round-trip 成功', () => {
+    const state = createInitialState(1);
+    state.pendingCommands.push({ type: 'placeRoad', x: 3, y: 4 });
+    state.pendingCommands.push({ type: 'removeRoad', x: 5, y: 6 });
+
+    const restored = deserializeGameState(serializeGameState(state));
+
+    expect(restored.pendingCommands).toEqual(state.pendingCommands);
+  });
 });
 
 describe('R4：deserializeGameState 驗證拒絕（訊息含欄位名）', () => {
