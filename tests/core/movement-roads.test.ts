@@ -211,4 +211,15 @@ describe('帶權尋路仍維持 core 契約', () => {
     expect(() => sys.update(state, ctx)).not.toThrow();
     expect(state.citizens[0]).toMatchObject({ x: 0, y: 1.9 });
   });
+  it('界外起點的居民（手改存檔才可能）不讓 movement throw，原地不動，其他居民照常更新（Codex 第二審 M6-W3）', () => {
+    const bounds = { w: 8, h: 5 };
+    const state = detourWorld();
+    const stray: Citizen = { ...state.citizens[0], id: 'stray', x: -1, y: 0 };
+    state.citizens.unshift(stray);
+    const sys = createMovementSystem(makeDefs(), bounds, ROADS_K3);
+
+    expect(() => sys.update(state, makeCtx(0))).not.toThrow();
+    expect(state.citizens[0]).toMatchObject({ x: -1, y: 0 });
+    expect(state.citizens[1]).toMatchObject({ x: 0, y: 1.9 });
+  });
 });

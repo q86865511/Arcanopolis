@@ -27,6 +27,7 @@
   **⚠ 待裁決（勿當刻意行為）**：帶權首步需「遠離目標去接道路」時，跨格快路（設計紅線，只比曼哈頓）下一 tick 把居民拉回，形成 0.1 幅度永久振盪
   （重現：8×5、home(0,2)→job(6,2)、y=0 整排路）。movebench 抓不到（居民一直在動）。故 `data/roads.json` 的 nonRoadStepCost **暫定 1**，
   帶權在遊戲內不生效；測試以顯式注入 K=3 鎖住「道路確實影響路徑」。選項見「待辦」。分工：bucketSearch Codex、基線與整合 Claude architect、Codex 第二審 movement。
+  第二審提出 1 中度（界外起點居民會讓 bucketSearch throw、整個 movement 中斷；舊 BFS 會走回界內）→ 改為原地不動並鎖測試，屬有意放棄的相容（只影響手改存檔）。
 - [2026-09-03] **M6-W2 鋪路／拆路指令＋道路渲染＋道路工具**（typecheck/848 tests/build 全綠，+17 tests；平衡曲線與基準 diff 為空）。
   core：`placeRoad`（世界內→地形可建→無建築佔格→無既有路→成本原子扣款，`roads.json` 每格 stone 1）、`removeRoad`（免費不退，防鋪拆刷資源）；
   `Simulation` 第 5 個選填引數注入 `RoadsConfig`，未注入一律靜默跳過（舊呼叫端行為不變）；`canBuildAt` 拒絕 footprint 覆蓋道路格。

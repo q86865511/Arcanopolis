@@ -301,6 +301,11 @@ function boundedBestEffortRoute(start: Point, target: Point, search: SearchEnv):
     target.x >= 0 && target.y >= 0 && target.x < bounds.w && target.y < bounds.h
       ? target.y * bounds.w + target.x
       : -1;
+  // 界外起點（只可能來自手改存檔：save 只驗座標絕對值上限，不驗 worldSize）：bucketSearch 對界外索引會 throw，
+  // 一個壞居民不該讓整個 movement 中斷，改為原地不動。舊 BFS 在此情境會讓他走回界內，屬有意放棄的相容（Codex 第二審 M6-W3）。
+  if (start.x < 0 || start.y < 0 || start.x >= bounds.w || start.y >= bounds.h) {
+    return { next: null, pathLength: 0, remainingDistance: startDistance };
+  }
   let bestFirstStep = -1;
   let bestHops = 0;
   let bestX = start.x;
