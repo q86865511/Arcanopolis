@@ -12,6 +12,8 @@
 //   - 建築佈局變動（蓋樓/拆樓）下一 tick 即生效，不可能沿著失效路徑穿牆；
 //   - serialize → deserialize → 續跑，與連續跑產出完全相同的 state；
 //   - 沒有任何以 citizen.id 為鍵的快取，居民死亡也不會殘留記憶體。
+// （阻擋格用的 blockedStamp 陣列雖跨 tick 重用，但每 tick 換 generation 全數重寫，
+//  不帶任何上一 tick 的資訊——不構成跨 tick 記憶。）
 //
 // 每 tick 的決策（每位居民）：
 //  1. 居民座標恆滿足「至多一軸為非整數」——不是站在格中心，就是正在單一軸上跨越相鄰兩格。
@@ -33,8 +35,9 @@ import type { System, SimContext } from '../sim/system';
 
 /** 移動速度：格/tick */
 const SPEED = 0.1;
-/** 上半日／下半日分界：tickOfDay < 300 為上半日（朝 job 前進），否則下半日（朝 home 前進）。 */
-const UPPER_HALF_END = 300;
+/** 上半日／下半日分界：tickOfDay < 300 為上半日（朝 job 前進），否則下半日（朝 home 前進）。
+ *  外部只有量測工具需要重建同一份目標判定（見 src/tools/movebench.ts），故對外公開。 */
+export const UPPER_HALF_END = 300;
 /** 座標正規化網格：所有座標皆為 0.1 的整數倍 */
 const COORD_SCALE = 10;
 /** 浮點比較容差：座標已正規化到 0.1 網格，1e-9 足以吸收殘留誤差且遠小於半步 */
@@ -56,10 +59,24 @@ interface Step {
   to: number;
 }
 
+/**
+ * 尋路工作量計數器（效能基線量測用，見 src/tools/movebench.ts）。
+ * 由呼叫端建立並持有，movement 只累加；不傳就完全不寫入任何物件，也不影響任何行為。
+ */
+export interface MovementStats {
+  /** boundedBestEffortRoute 的呼叫次數 */
+  searchCalls: number;
+  /** 上述呼叫累計「自佇列取出並展開」的節點數 */
+  settledNodes: number;
+}
+
+/** blockedStamp 的 generation 上限（Uint32Array 值域）；超過即整陣列歸零重新計數。 */
+const MAX_BLOCKED_GENERATION = 0xffffffff;
+
 export function createMovementSystem(
   defs: BuildingDef[],
   bounds: Bounds,
-  options?: { searchBudget?: number },
+  options?: { searchBudget?: number; stats?: MovementStats },
 ): System {
   const defsByType = new Map<string, BuildingDef>(defs.map((d) => [d.id, d]));
   const searchBudget = options?.searchBudget ?? DEFAULT_SEARCH_BUDGET;
@@ -68,11 +85,25 @@ export function createMovementSystem(
       `createMovementSystem: searchBudget 必須是大於等於 1 的有限數，收到 ${String(searchBudget)}`,
     );
   }
+  const stats = options?.stats;
+
+  // 阻擋格改以整數索引（index = y*w+x）記錄。陣列本身跨 tick 重用，但每 tick 換一個
+  // generation 戳記，語義等同原本每 tick 重建的字串鍵 Set——不構成跨 tick 記憶。
+  const tileCount =
+    Number.isInteger(bounds.w) && Number.isInteger(bounds.h) && bounds.w > 0 && bounds.h > 0
+      ? bounds.w * bounds.h
+      : 0;
+  const blockedStamp = new Uint32Array(tileCount);
+  let blockedGeneration = 0;
 
   return {
     id: 'movement',
     update(state: GameState, ctx: SimContext): void {
-      const blocked = new Set<string>();
+      blockedGeneration += 1;
+      if (blockedGeneration > MAX_BLOCKED_GENERATION) {
+        blockedStamp.fill(0);
+        blockedGeneration = 1;
+      }
       // id → building 先建表，避免每位居民每 tick 對 buildings 線性搜尋；重複 id 保留先出現者
       // （與原本 state.buildings.find 的語義一致）。
       const buildingsById = new Map<string, Building>();
@@ -81,10 +112,14 @@ export function createMovementSystem(
         const def = defsByType.get(b.type);
         const size = def ? def.size : { w: 1, h: 1 };
         for (const t of footprintTiles(b.x, b.y, size.w, size.h)) {
-          blocked.add(`${t.x},${t.y}`);
+          // 界外 footprint 格直接丟棄：isBlocked 只會被已做界檢查的呼叫端查詢，
+          // 而界外座標寫進線性索引會環繞誤標到別格。
+          if (t.x < 0 || t.y < 0 || t.x >= bounds.w || t.y >= bounds.h) continue;
+          blockedStamp[t.y * bounds.w + t.x] = blockedGeneration;
         }
       }
-      const isBlocked = (x: number, y: number): boolean => blocked.has(`${x},${y}`);
+      const isBlocked = (x: number, y: number): boolean =>
+        blockedStamp[y * bounds.w + x] === blockedGeneration;
 
       const upperHalf = ctx.time.tickOfDay < UPPER_HALF_END;
 
@@ -96,7 +131,7 @@ export function createMovementSystem(
         const target: Point = { x: targetBuilding.x, y: targetBuilding.y };
         if (citizen.x === target.x && citizen.y === target.y) continue; // 已在目標格：靜止
 
-        const step = chooseStep(citizen, target, isBlocked, bounds, searchBudget);
+        const step = chooseStep(citizen, target, isBlocked, bounds, searchBudget, stats);
         if (step === null) continue; // 無路可走：原地不動
         advance(citizen, step);
       }
@@ -111,6 +146,7 @@ function chooseStep(
   isBlocked: (x: number, y: number) => boolean,
   bounds: Bounds,
   searchBudget: number,
+  stats: MovementStats | undefined,
 ): Step | null {
   const canEnter = (x: number, y: number): boolean => {
     if (x < 0 || y < 0 || x >= bounds.w || y >= bounds.h) return false;
@@ -129,6 +165,7 @@ function chooseStep(
       isBlocked,
       bounds,
       searchBudget,
+      stats,
     );
     if (route.next === null) return null;
     return route.next.x !== citizen.x
@@ -173,7 +210,7 @@ function chooseStep(
     const x = axis === 'x' ? cell : fixed;
     const y = axis === 'x' ? fixed : cell;
     if (!canEnter(x, y)) return Infinity;
-    const route = boundedBestEffortRoute({ x, y }, target, isBlocked, bounds, searchBudget);
+    const route = boundedBestEffortRoute({ x, y }, target, isBlocked, bounds, searchBudget, stats);
     return Math.abs(moving - cell) + route.pathLength + route.remainingDistance;
   };
 
@@ -203,6 +240,7 @@ function boundedBestEffortRoute(
   isBlocked: (x: number, y: number) => boolean,
   bounds: Bounds,
   maxNodes: number,
+  stats?: MovementStats,
 ): BestEffortRoute {
   const startDistance = Math.abs(start.x - target.x) + Math.abs(start.y - target.y);
   const nodeLimit = Math.floor(maxNodes);
@@ -216,8 +254,11 @@ function boundedBestEffortRoute(
   let bestY = start.y;
   let bestDistance = startDistance;
 
+  let settledNodes = 0;
+
   for (let head = 0; head < queue.length; head++) {
     const index = queue[head];
+    settledNodes += 1;
     const x = index % bounds.w;
     const y = (index - x) / bounds.w;
     const distance = Math.abs(x - target.x) + Math.abs(y - target.y);
@@ -246,6 +287,11 @@ function boundedBestEffortRoute(
       firstSteps.push(head === 0 ? neighborIndex : firstSteps[head]);
       pathLengths.push(pathLengths[head] + 1);
     }
+  }
+
+  if (stats !== undefined) {
+    stats.searchCalls += 1;
+    stats.settledNodes += settledNodes;
   }
 
   if (bestDistance >= startDistance) {
