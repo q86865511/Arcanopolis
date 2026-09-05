@@ -45,6 +45,12 @@ npm run dev        # Vite dev server（預設 http://localhost:5173）
 npm run balance
 ```
 
+居民移動系統效能基線（三種道路密度，輸出 CSV：elapsedMs／p95TickMs／frozenPct／searchCalls／avgSettledNodes／arrivedPct）：
+
+```bash
+npm run movebench -- --road-density 0,0.05,1 --non-road-cost 3
+```
+
 數值平衡用的 headless 快轉模擬器：
 
 ```bash
@@ -85,6 +91,6 @@ npm run simulate -- --seed 1 --ticks 3000 --sample-every 600 --buildings "farm:2
 過渡地貌而非硬邊，全畫面套輕度降飽和與暗角統一色調。
 塔防、冒險者公會、魔法與多種族尚未實作。
 進度會**每個遊戲日自動存檔**到瀏覽器，重新開啟頁面自動續上次的城市。
-存檔格式現為 v6（道路系統開發中，目前可鋪路但道路尚不影響通行與經濟）：更早版本的存檔不相容，開啟時會直接開新局並提示。
+存檔格式現為 v6（道路系統開發中：可鋪路，帶權尋路的基礎設施已落地但遊戲內暫未啟用，道路尚不影響通行與經濟）：更早版本的存檔不相容，開啟時會直接開新局並提示。
 
 詳細進度與已知問題見 [PROGRESS.md](PROGRESS.md)。
