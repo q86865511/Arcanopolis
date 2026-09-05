@@ -6,8 +6,8 @@
 //   3. frozenPct——「該走卻沒走」的居民-tick 比例，帶權尋路上線後必須維持 0；
 //   4. arrivedPct——跑完時已站在目標格的居民比例，用來確認世界參數合理（不是全體塞車）。
 //
-// --road-density 目前不影響尋路（道路尚未進入 movement 的成本模型），先建立三檔對照，
-// 讓帶權尋路上線後能直接看出「鋪路後變快/變慢多少」。
+// --road-density 搭配 --non-road-cost 使用：前者決定世界鋪多少路，後者是非道路格的步進成本 K
+// （預設 3，比照 data/roads.json）。跑 --non-road-cost 1 即退回無權重的 BFS 行為，可與帶權版本對照。
 //
 // 本檔是 CLI 工具不是 core：允許使用 performance.now()（core 的決定論禁令不適用於量測皮層），
 // 但世界建構本身仍是 (seed, 參數) 的純函數，同參數兩次跑必得同一個世界。
@@ -53,6 +53,8 @@ export interface MoveBenchArgs {
   /** 逐一量測的道路密度清單（--road-density 可用逗號帶多值） */
   roadDensities: number[];
   searchBudget?: number;
+  /** 省略時沿用 DEFAULT_NON_ROAD_STEP_COST */
+  nonRoadCost?: number;
   out?: string;
 }
 
@@ -65,6 +67,8 @@ export interface MoveBenchOptions {
   roadDensity: number;
   /** 省略時沿用 movement 自己的預設預算 */
   searchBudget?: number;
+  /** 非道路格的步進成本 K；省略時為 DEFAULT_NON_ROAD_STEP_COST，1 即無權重 */
+  nonRoadCost?: number;
 }
 
 export interface MoveBenchResult {
@@ -91,6 +95,9 @@ const DEFAULTS = {
   ticks: 300,
   roadDensities: [0],
 } as const;
+
+/** --non-road-cost 省略時的 K，與 data/roads.json 的 nonRoadStepCost 對齊。 */
+const DEFAULT_NON_ROAD_STEP_COST = 3;
 
 function parseInteger(parameter: string, value: string): number {
   // 嚴格十進位，比照 fastforward.ts：拒絕 0x10、1e3、"+5"、"007" 等 Number() 過寬接受的形式
@@ -140,6 +147,7 @@ const VALUED_PARAMS = new Set([
   '--ticks',
   '--road-density',
   '--search-budget',
+  '--non-road-cost',
   '--out',
 ]);
 
@@ -170,6 +178,7 @@ export function parseArgs(argv: string[]): MoveBenchArgs {
   const ticksValue = values.get('--ticks');
   const densityValue = values.get('--road-density');
   const searchBudgetValue = values.get('--search-budget');
+  const nonRoadCostValue = values.get('--non-road-cost');
   const out = values.get('--out');
 
   if (out !== undefined && out.length === 0) {
@@ -193,6 +202,9 @@ export function parseArgs(argv: string[]): MoveBenchArgs {
   };
   if (searchBudgetValue !== undefined) {
     args.searchBudget = parsePositiveInteger('--search-budget', searchBudgetValue);
+  }
+  if (nonRoadCostValue !== undefined) {
+    args.nonRoadCost = parsePositiveInteger('--non-road-cost', nonRoadCostValue);
   }
   if (out !== undefined) args.out = out;
   return args;
@@ -320,10 +332,13 @@ export function runMoveBench(options: MoveBenchOptions): MoveBenchResult {
   );
 
   const stats: MovementStats = { searchCalls: 0, settledNodes: 0 };
+  const roads = { nonRoadStepCost: options.nonRoadCost ?? DEFAULT_NON_ROAD_STEP_COST };
   const system = createMovementSystem(
     BUILDING_DEFS,
     { w: options.grid, h: options.grid },
-    options.searchBudget === undefined ? { stats } : { searchBudget: options.searchBudget, stats },
+    options.searchBudget === undefined
+      ? { stats, roads }
+      : { searchBudget: options.searchBudget, stats, roads },
   );
   // movement 不消耗 rng，但 SimContext 必須帶一個。
   const rng = createRng(options.seed);
@@ -403,6 +418,7 @@ export function main(argv: string[] = process.argv.slice(2)): void {
       ticks: args.ticks,
       roadDensity: density,
       searchBudget: args.searchBudget,
+      nonRoadCost: args.nonRoadCost,
     });
     rows.push(formatCsvRow(density, result));
   }

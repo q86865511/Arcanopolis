@@ -1,5 +1,5 @@
 {
-  "nonRoadStepCost": 3,
+  "nonRoadStepCost": 1,
   "speedMultiplierOnRoad": 1,
   "cost": { "stone": 1 }
 }

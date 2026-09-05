@@ -347,6 +347,7 @@ export function createBalanceWorld(seed = 1, worldSize?: number): BalanceWorld {
     terrainEconomy: TERRAIN_ECONOMY,
     populationConfig: POPULATION_CONFIG,
     economyConfig: ECONOMY_CONFIG,
+    roads: ROADS_CONFIG,
     bounds: { w: state.worldSize, h: state.worldSize },
   });
   const simulation = new Simulation(

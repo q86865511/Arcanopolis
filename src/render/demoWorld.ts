@@ -104,6 +104,7 @@ export function createSimulationFor(state: GameState): Simulation {
       terrainEconomy: TERRAIN_ECONOMY,
       populationConfig: POPULATION_CONFIG,
       economyConfig: ECONOMY_CONFIG,
+      roads: ROADS_CONFIG,
       bounds: { w: state.worldSize, h: state.worldSize },
     }),
     BUILDING_DEFS,
