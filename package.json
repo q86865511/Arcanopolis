@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "simulate": "tsx src/tools/fastforward.ts",
     "balance": "tsx src/tools/balance.ts",
+    "movebench": "tsx src/tools/movebench.ts",
     "screenshot": "node scripts/screenshot.mjs"
   },
   "devDependencies": {
