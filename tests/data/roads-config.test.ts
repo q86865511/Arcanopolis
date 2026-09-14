@@ -43,8 +43,10 @@ describe('parseRoadsConfig', () => {
   });
 
   it('真實資料表通過且鎖定 W1 數值', () => {
+    // nonRoadStepCost 暫定 1（帶權尋路的基礎設施已就位，但跨格快路與帶權首步的振盪問題尚待裁決，
+    // 見 movement.ts 檔頭「已知限制」；裁決後改回 3 並更新此鎖）。
     expect(parseRoadsConfig(roadsJson)).toEqual({
-      nonRoadStepCost: 3,
+      nonRoadStepCost: 1,
       speedMultiplierOnRoad: 1,
       cost: { stone: 1 },
     });

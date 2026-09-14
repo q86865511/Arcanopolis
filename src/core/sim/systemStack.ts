@@ -1,7 +1,13 @@
 // 預設順序固定為 jobs → production → population → tax → regrowth → movement；
 // M6-W4 的 connectivity 會插在最前面。
 
-import type { BuildingDef, EconomyConfig, PopulationConfig, TerrainEconomy } from '../../data/types';
+import type {
+  BuildingDef,
+  EconomyConfig,
+  PopulationConfig,
+  RoadsConfig,
+  TerrainEconomy,
+} from '../../data/types';
 import { createJobsSystem } from '../systems/jobs';
 import { createMovementSystem } from '../systems/movement';
 import { createPopulationSystem } from '../systems/population';
@@ -15,6 +21,7 @@ export interface SystemStackConfig {
   terrainEconomy: TerrainEconomy;
   populationConfig: PopulationConfig;
   economyConfig: EconomyConfig;
+  roads: RoadsConfig;
   bounds: { w: number; h: number };
 }
 
@@ -25,6 +32,9 @@ export function createDefaultSystems(config: SystemStackConfig): System[] {
     createPopulationSystem(config.buildingDefs, config.populationConfig),
     createTaxSystem(config.economyConfig),
     createRegrowthSystem(config.terrainEconomy),
-    createMovementSystem(config.buildingDefs, config.bounds),
+    // 只取 nonRoadStepCost：speedMultiplierOnRoad 屬移動速度（M6-W5），不進尋路成本。
+    createMovementSystem(config.buildingDefs, config.bounds, {
+      roads: { nonRoadStepCost: config.roads.nonRoadStepCost },
+    }),
   ];
 }

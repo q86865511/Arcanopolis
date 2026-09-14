@@ -2,7 +2,7 @@
 
 ## 目前狀態
 
-**M5 看得見的城市全部完成、M6 道路與城市規劃進行中（W1 資料層、W2 鋪路工具完成 2026-09-03；道路仍是純裝飾，W3 起影響路徑），待使用者實玩驗收（一律開新地圖 `?new=1`）**。地形定調（暗橄欖）、
+**M6 道路與城市規劃進行中（W1 資料層、W2 鋪路工具、W3 帶權尋路基礎設施完成 2026-09-03；遊戲內帶權暫關閉待「跨格規則」裁決），待使用者實玩驗收（一律開新地圖 `?new=1`）**。地形定調（暗橄欖）、
 變體混鋪＋裝飾散佈、斜坡裙邊、2×2 tavern＋麥酒＋12 張建築重生、全畫面色調統一
 全部落地；724 tests 綠、tsc 零錯誤。剩餘素材債見 W4 已完成條目。
 （美術方向定案脈絡：六方向 spike 評估後以世紀帝國 II 為北極星留在 2D tile 架構，
@@ -15,6 +15,19 @@
 
 ## 已完成
 
+- [2026-09-03] **M6-W3 帶權尋路（基礎設施落地，遊戲內帶權暫不生效，待裁決）**（typecheck/893 tests/build 全綠，+45 tests）。
+  `src/core/path/bucketSearch.ts`：Dial's 循環桶整數權重 Dijkstra（K+1 個環形 FIFO 桶、scratch typed array ＋ generation 戳記、lazy deletion），
+  **400 張隨機地圖 K=1 與舊 BFS settle 序列逐格等價 mismatch=0**（oracle 為逐字複製 51c328b 的 BFS，`tests/core/helpers/legacyRoute.ts`）。
+  `movement.ts`：`blocked` 改整數索引戳記陣列；`boundedBestEffortRoute` 改呼叫 bucketSearch，中繼目標擂台與紅線一字未動；`hasCloserExit` 快路未動；
+  道路查詢採每 tick 惰性戳記快取（全鋪圖每 tick 走訪 4 萬把鍵要 6.7ms，惰性後 0.14ms）；`MovementStats` 量測掛鉤。
+  `systemStack` 注入 `nonRoadStepCost`；未注入 K=1 等價舊行為。新工具 `npm run movebench -- --road-density 0,0.05,1 [--non-road-cost 3]`。
+  **基線（seed 1／200×200／40 居民／30 建築／300 tick）**：K=1 elapsed 67–82ms、p95 1.3ms；K=3 elapsed 86–100ms、p95 1.9–2.1ms；searchCalls 1368（K=3 有路時 1200）、
+  avgSettledNodes 512（預算恆打滿）、frozen 0。**PROGRESS 舊記錄的 4ms 未被複現，以後以此表為準；settledNodes 比毫秒更適合當回歸判準。**
+  無道路情境零變化：balance 末行逐字相同、movement 兩測試檔零修改。
+  **⚠ 待裁決（勿當刻意行為）**：帶權首步需「遠離目標去接道路」時，跨格快路（設計紅線，只比曼哈頓）下一 tick 把居民拉回，形成 0.1 幅度永久振盪
+  （重現：8×5、home(0,2)→job(6,2)、y=0 整排路）。movebench 抓不到（居民一直在動）。故 `data/roads.json` 的 nonRoadStepCost **暫定 1**，
+  帶權在遊戲內不生效；測試以顯式注入 K=3 鎖住「道路確實影響路徑」。選項見「待辦」。分工：bucketSearch Codex、基線與整合 Claude architect、Codex 第二審 movement。
+  第二審提出 1 中度（界外起點居民會讓 bucketSearch throw、整個 movement 中斷；舊 BFS 會走回界內）→ 改為原地不動並鎖測試，屬有意放棄的相容（只影響手改存檔）。
 - [2026-09-03] **M6-W2 鋪路／拆路指令＋道路渲染＋道路工具**（typecheck/848 tests/build 全綠，+17 tests；平衡曲線與基準 diff 為空）。
   core：`placeRoad`（世界內→地形可建→無建築佔格→無既有路→成本原子扣款，`roads.json` 每格 stone 1）、`removeRoad`（免費不退，防鋪拆刷資源）；
   `Simulation` 第 5 個選填引數注入 `RoadsConfig`，未注入一律靜默跳過（舊呼叫端行為不變）；`canBuildAt` 拒絕 footprint 覆蓋道路格。
@@ -428,12 +441,18 @@
 ## 進行中
 
 - **M6 道路與城市規劃**（設計原文：`C:\Users\q86865511\.claude\backups\plans-archive\c-users-q86865511-appdata-local-temp-cl-starry-flute.md` 第 95–219 行）：
-  ~~W1 資料層~~ → ~~W2 指令＋渲染＋道路工具~~ 完成 → W3 bucketSearch 帶權尋路（硬門檻：400 張地圖等價 mismatch=0）
+  ~~W1 資料層~~ → ~~W2 指令＋渲染＋道路工具~~ → ~~W3 bucketSearch 帶權尋路~~（基礎設施完成；遊戲內 K 暫定 1）
   → W4 連通性 system＋主堡（規格斷點，整波完成才 commit）→ W5 道路速度加成＋平衡再校準。
 
 （無——M2 已收尾，待使用者實玩驗收）
 
 ## 待辦
+
+- **【裁決】M6-W3 跨格規則與帶權首步的振盪**（2026-09-03 登記）。三個選項：
+  (a) 居民狀態加 `heading`（正在前往的格），格中心才搜尋、跨格一律走向 heading（存檔 v7＋遷移，跨格快路退役或降為 heading 缺失時的後備）——
+  最正確，但會改變無道路情境的部分軌跡（BFS 首步不再被貪婪覆寫），855 行 movement 測試需逐條重判；
+  (b) 有道路時跨格也跑帶權搜尋（每跨格 tick 兩次搜尋，成本約 10 倍，不建議）；
+  (c) 併入 W4 連通性一起重設計跨格規則。裁決前 `roads.json` 的 nonRoadStepCost 維持 1。
 
 - **【下一個 session 從這裡開始】AoE2 美術五波（2026-08-25 使用者定案，優先於 M5-W2）**。
   北極星＝世紀帝國 II／Stronghold 的 2D 預算圖感：暗橄欖色調、高雜色密度、寫實偏暗、

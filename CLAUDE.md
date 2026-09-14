@@ -40,6 +40,8 @@
   模式（滿編就業且忽略地形限制）；加 `--full-sim` 才套用完整的人口與地形耗竭規則
   （jobs+production+population+movement，人口從 0 成長，
   可配 `--grid <n>` 地圖邊長與 `--population-config <path>` 覆寫平衡常數，兩者僅 --full-sim 下有效）。
+- 移動效能基線：`npm run movebench -- --road-density 0,0.05,1 [--non-road-cost K] [--grid n --citizens n --buildings n --ticks n]`
+  ——改 `src\core\systems\movement.ts` 或 `src\core\path\` 前後各跑一次；回歸判準看 avgSettledNodes 與 frozenPct（毫秒受 JIT 暖機影響，第一組偏高）。
 - 視覺驗證截圖：`npm run screenshot -- [--out path.png] [--wait ms] [--port n] [--center gx,gy] [--click x,y] [--hover x,y] [--query new=1&tick=N] [--storage file.json]`
   ——自起 vite（預設 5199）→ chromium 截圖 → 關閉；頁面無 canvas 或有 pageerror 時 exit 1。
   `--center` 把鏡頭移到指定格（驗證海岸線、礦脈等開局視野外的地方）。
@@ -65,6 +67,8 @@
   不得直接索引 `state.roads`；道路獨立於 terrainOverrides（regrowth 整鍵刪除會清掉同格道路）。
 - **存檔 v6 起舊檔一律作廢**（`OutdatedSaveError`，不寫遷移）；之後每次 schema 升版仍依鐵則附遷移＋舊檔測試，
   作廢是 M6 一次性裁決不是新慣例。
+- **尋路只有一套**：`src\core\path\bucketSearch.ts`（Dial's 桶佇列）；`astar.ts` 是零生產呼叫的舊模組，只被自己的測試釘住，不要改造它也不要新增呼叫。
+  改動 movement 的搜尋語義必先跑 `tests\core\bucketSearch-equivalence.test.ts`（400 張地圖 K=1 對舊 BFS 逐格等價）與 movement 兩測試檔（預期零修改）。
 - **在職＝到崗**（M4.5-W1 起）：production 計算在職人數時必須確認 citizen 站在建築 footprint 上，
   只看 `citizen.job` 不算數。任何新增的「依人力運作」機制都沿用此語義，
   否則通勤距離會再次與經濟脫鉤。座標比較用精確相等——movement 抵達時會貼齊格中心。

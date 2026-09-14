@@ -20,6 +20,7 @@ function config(): SystemStackConfig {
       taxPerEmployedCitizenPerDay: 1,
       marketBuyMarkup: 0.25,
     },
+    roads: { nonRoadStepCost: 3, speedMultiplierOnRoad: 1, cost: {} },
     bounds: { w: 20, h: 20 },
   };
 }

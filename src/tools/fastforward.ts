@@ -286,6 +286,7 @@ export function runFastForward(options: FastForwardOptions): FastForwardResult {
       terrainEconomy,
       populationConfig,
       economyConfig,
+      roads: roadsConfig,
       bounds: { w: grid, h: grid },
     });
   } else {
