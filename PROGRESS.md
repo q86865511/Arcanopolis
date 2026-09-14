@@ -2,7 +2,7 @@
 
 ## 目前狀態
 
-**M6 道路與城市規劃進行中（W1 資料層、W2 鋪路工具、W3 帶權尋路基礎設施完成 2026-09-03；遊戲內帶權暫關閉待「跨格規則」裁決），待使用者實玩驗收（一律開新地圖 `?new=1`）**。地形定調（暗橄欖）、
+**專案暫停（2026-09-15 使用者裁決「先做到這」）。M6 道路與城市規劃做到 W3：W1 資料層、W2 鋪路工具（2026-09-03）、W3 帶權尋路基礎設施（2026-09-05）皆已 merge 到 master（703eabc）；遊戲內帶權暫關閉。下個 session 從「待辦」第一條的跨格規則裁決開始（選 (a) 開 W3b，選 (c) 直接開 W4），實玩驗收一律開新地圖 `?new=1`。**地形定調（暗橄欖）、
 變體混鋪＋裝飾散佈、斜坡裙邊、2×2 tavern＋麥酒＋12 張建築重生、全畫面色調統一
 全部落地；724 tests 綠、tsc 零錯誤。剩餘素材債見 W4 已完成條目。
 （美術方向定案脈絡：六方向 spike 評估後以世紀帝國 II 為北極星留在 2D tile 架構，
@@ -15,7 +15,7 @@
 
 ## 已完成
 
-- [2026-09-03] **M6-W3 帶權尋路（基礎設施落地，遊戲內帶權暫不生效，待裁決）**（typecheck/893 tests/build 全綠，+45 tests）。
+- [2026-09-05] **M6-W3 帶權尋路（基礎設施落地，遊戲內帶權暫不生效，待裁決）**（typecheck/893 tests/build 全綠，+45 tests）。
   `src/core/path/bucketSearch.ts`：Dial's 循環桶整數權重 Dijkstra（K+1 個環形 FIFO 桶、scratch typed array ＋ generation 戳記、lazy deletion），
   **400 張隨機地圖 K=1 與舊 BFS settle 序列逐格等價 mismatch=0**（oracle 為逐字複製 51c328b 的 BFS，`tests/core/helpers/legacyRoute.ts`）。
   `movement.ts`：`blocked` 改整數索引戳記陣列；`boundedBestEffortRoute` 改呼叫 bucketSearch，中繼目標擂台與紅線一字未動；`hasCloserExit` 快路未動；
